@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
-import { api, ApiError } from '@/lib/api';
+import { api, generalApiErrorMessage } from '@/lib/api';
 import { useAuthStore } from '@/stores/auth';
 import type { LoginResponse } from '@/types/api';
 import { Button } from '@/components/ui/button';
@@ -24,12 +24,13 @@ export function Login() {
   const mutation = useMutation({
     mutationFn: (vars: { email: string; password: string }) =>
       api.post<LoginResponse>('/auth/login', vars),
-    onSuccess: (data) => {
-      if (data.user.role !== 'ADMIN') {
+    onSuccess: (response) => {
+      const { user, token } = response.data;
+      if (user.role !== 'ADMIN') {
         mutation.reset();
         return;
       }
-      setSession(data.token, data.user);
+      setSession(token, user);
       navigate('/dashboard', { replace: true });
     },
   });
@@ -39,14 +40,12 @@ export function Login() {
     mutation.mutate({ email, password });
   };
 
-  const errorMessage =
-    mutation.error instanceof ApiError
-      ? mutation.error.message
-      : mutation.error
-      ? 'Unexpected error'
-      : mutation.data && mutation.data.user.role !== 'ADMIN'
-      ? 'This account is not an administrator.'
-      : null;
+  const errorMessage = (() => {
+    if (mutation.data && mutation.data.data.user.role !== 'ADMIN') {
+      return 'This account is not an administrator.';
+    }
+    return generalApiErrorMessage(mutation.error);
+  })();
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-muted/40">

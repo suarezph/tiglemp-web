@@ -1,11 +1,23 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ExternalLink, FileText, MapPin, MoreHorizontal, Plus, Star } from 'lucide-react';
+import {
+  Ban,
+  CheckCircle2,
+  ExternalLink,
+  FileText,
+  MapPin,
+  MoreHorizontal,
+  Plus,
+  ShieldCheck,
+  Star,
+  XCircle,
+} from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import type {
+  ApprovalAction,
+  ApprovalLog,
   ApprovalStatus,
-  BusinessType,
-  ListResponse,
+  ServiceType,
   Partner,
   PartnerShopLocationInput,
 } from '@/types/api';
@@ -39,15 +51,15 @@ import {
 } from '@/components/ui/table';
 import { ShopLocationsField } from '@/components/ShopLocationsField';
 import { DocumentsUploader } from '@/components/DocumentsUploader';
-import { BusinessTypePicker } from '@/components/BusinessTypePicker';
+import { ServiceTypePicker } from '@/components/ServiceTypePicker';
 
 const PARTNERS_KEY = ['admin', 'partners'] as const;
-const BUSINESS_TYPES_KEY = ['meta', 'business-types'] as const;
+const SERVICE_TYPES_KEY = ['meta', 'service-types'] as const;
 
-function useBusinessTypes(enabled: boolean) {
+function useServiceTypes(enabled: boolean) {
   return useQuery({
-    queryKey: BUSINESS_TYPES_KEY,
-    queryFn: () => api.get<ListResponse<BusinessType>>('/meta/business-types'),
+    queryKey: SERVICE_TYPES_KEY,
+    queryFn: () => api.get<ServiceType[]>('/meta/service-types'),
     enabled,
   });
 }
@@ -73,35 +85,15 @@ const sanitizeLocations = (
   }));
 
 export function Partners() {
-  const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Partner | null>(null);
   const [detailsTarget, setDetailsTarget] = useState<Partner | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<Partner | null>(null);
+  const [reviewTarget, setReviewTarget] = useState<Partner | null>(null);
+  const [banTarget, setBanTarget] = useState<Partner | null>(null);
 
   const partnersQuery = useQuery({
     queryKey: PARTNERS_KEY,
-    queryFn: () => api.get<ListResponse<Partner>>('/admin/partners'),
-  });
-
-  const approveMutation = useMutation({
-    mutationFn: ({
-      id,
-      approvalStatus,
-    }: {
-      id: string;
-      approvalStatus: ApprovalStatus;
-    }) =>
-      api.patch(`/admin/partners/${id}/approval`, { approvalStatus }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: PARTNERS_KEY }),
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => api.delete(`/admin/partners/${id}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: PARTNERS_KEY });
-      setDeleteTarget(null);
-    },
+    queryFn: () => api.get<Partner[]>('/admin/partners'),
   });
 
   const partners = partnersQuery.data?.data ?? [];
@@ -193,9 +185,17 @@ export function Partners() {
                     )}
                   </TableCell>
                   <TableCell>
-                    <Badge variant={statusVariant[partner.approvalStatus]}>
-                      {partner.approvalStatus}
-                    </Badge>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <Badge variant={statusVariant[partner.approvalStatus]}>
+                        {partner.approvalStatus}
+                      </Badge>
+                      {partner.isBanned && (
+                        <Badge variant="destructive" className="gap-1">
+                          <Ban className="size-3" />
+                          Banned
+                        </Badge>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell className="text-right">
                     <DropdownMenu>
@@ -216,41 +216,30 @@ export function Partners() {
                           Edit
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          disabled={
-                            partner.approvalStatus === 'APPROVED' ||
-                            approveMutation.isPending
-                          }
-                          onClick={() =>
-                            approveMutation.mutate({
-                              id: partner.id,
-                              approvalStatus: 'APPROVED',
-                            })
-                          }
-                        >
-                          Approve
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          disabled={
-                            partner.approvalStatus === 'REJECTED' ||
-                            approveMutation.isPending
-                          }
-                          onClick={() =>
-                            approveMutation.mutate({
-                              id: partner.id,
-                              approvalStatus: 'REJECTED',
-                            })
-                          }
-                        >
-                          Reject
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          variant="destructive"
-                          onClick={() => setDeleteTarget(partner)}
-                        >
-                          Delete
-                        </DropdownMenuItem>
+                        {partner.approvalStatus !== 'APPROVED' && (
+                          <DropdownMenuItem
+                            onClick={() => setReviewTarget(partner)}
+                          >
+                            Review
+                          </DropdownMenuItem>
+                        )}
+                        {partner.approvalStatus === 'APPROVED' &&
+                          !partner.isBanned && (
+                            <DropdownMenuItem
+                              variant="destructive"
+                              onClick={() => setBanTarget(partner)}
+                            >
+                              Ban
+                            </DropdownMenuItem>
+                          )}
+                        {partner.approvalStatus === 'APPROVED' &&
+                          partner.isBanned && (
+                            <DropdownMenuItem
+                              onClick={() => setBanTarget(partner)}
+                            >
+                              Unban
+                            </DropdownMenuItem>
+                          )}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>
@@ -270,16 +259,13 @@ export function Partners() {
         partner={detailsTarget}
         onClose={() => setDetailsTarget(null)}
       />
-      <DeletePartnerDialog
-        partner={deleteTarget}
-        onClose={() => setDeleteTarget(null)}
-        onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
-        isPending={deleteMutation.isPending}
-        error={
-          deleteMutation.error instanceof ApiError
-            ? deleteMutation.error.message
-            : null
-        }
+      <ReviewPartnerDialog
+        partner={reviewTarget}
+        onClose={() => setReviewTarget(null)}
+      />
+      <BanPartnerDialog
+        partner={banTarget}
+        onClose={() => setBanTarget(null)}
       />
     </>
   );
@@ -296,20 +282,20 @@ function CreatePartnerDialog({ open, onOpenChange }: CreatePartnerDialogProps) {
   const [password, setPassword] = useState('');
   const [businessName, setBusinessName] = useState('');
   const [phone, setPhone] = useState('');
-  const [businessTypeIds, setBusinessTypeIds] = useState<string[]>([]);
+  const [serviceTypeIds, setServiceTypeIds] = useState<string[]>([]);
   const [shopLocations, setShopLocations] = useState<
     PartnerShopLocationInput[]
   >([]);
   const [stagedFiles, setStagedFiles] = useState<File[]>([]);
 
-  const businessTypesQuery = useBusinessTypes(open);
+  const serviceTypesQuery = useServiceTypes(open);
 
   const reset = () => {
     setEmail('');
     setPassword('');
     setBusinessName('');
     setPhone('');
-    setBusinessTypeIds([]);
+    setServiceTypeIds([]);
     setShopLocations([]);
     setStagedFiles([]);
   };
@@ -321,7 +307,7 @@ function CreatePartnerDialog({ open, onOpenChange }: CreatePartnerDialogProps) {
         password,
         businessName,
         phone,
-        businessTypeIds,
+        serviceTypeIds,
         shopLocations: sanitizeLocations(shopLocations),
         // TODO: supportingDocuments — staged files are captured but not sent
         // until the upload-to-storage flow is finalized server-side.
@@ -382,15 +368,15 @@ function CreatePartnerDialog({ open, onOpenChange }: CreatePartnerDialogProps) {
             />
           </div>
           <div className="grid gap-2">
-            <Label>Business types</Label>
+            <Label>Service types</Label>
             <p className="text-xs text-muted-foreground">
               Pick all that apply (at least one).
             </p>
-            <BusinessTypePicker
-              options={businessTypesQuery.data?.data ?? []}
-              value={businessTypeIds}
-              onChange={setBusinessTypeIds}
-              loading={businessTypesQuery.isPending}
+            <ServiceTypePicker
+              options={serviceTypesQuery.data?.data ?? []}
+              value={serviceTypeIds}
+              onChange={setServiceTypeIds}
+              loading={serviceTypesQuery.isPending}
             />
           </div>
           <div className="grid gap-2">
@@ -449,7 +435,7 @@ function CreatePartnerDialog({ open, onOpenChange }: CreatePartnerDialogProps) {
             </Button>
             <Button
               type="submit"
-              disabled={mutation.isPending || businessTypeIds.length === 0}
+              disabled={mutation.isPending || serviceTypeIds.length === 0}
             >
               {mutation.isPending ? 'Creating…' : 'Create partner'}
             </Button>
@@ -469,20 +455,20 @@ function EditPartnerDialog({ partner, onClose }: EditPartnerDialogProps) {
   const queryClient = useQueryClient();
   const [businessName, setBusinessName] = useState('');
   const [phone, setPhone] = useState('');
-  const [businessTypeIds, setBusinessTypeIds] = useState<string[]>([]);
+  const [serviceTypeIds, setServiceTypeIds] = useState<string[]>([]);
   const [isActive, setIsActive] = useState(true);
   const [shopLocations, setShopLocations] = useState<
     PartnerShopLocationInput[]
   >([]);
   const [stagedFiles, setStagedFiles] = useState<File[]>([]);
 
-  const businessTypesQuery = useBusinessTypes(partner !== null);
+  const serviceTypesQuery = useServiceTypes(partner !== null);
 
   useEffect(() => {
     if (!partner) return;
     setBusinessName(partner.businessName);
     setPhone(partner.phone);
-    setBusinessTypeIds(partner.businessTypes.map((pbt) => pbt.businessTypeId));
+    setServiceTypeIds(partner.serviceTypes.map((pbt) => pbt.serviceTypeId));
     setIsActive(partner.user.isActive);
     setShopLocations(
       partner.shopLocations.map((loc) => ({
@@ -508,7 +494,7 @@ function EditPartnerDialog({ partner, onClose }: EditPartnerDialogProps) {
       api.put(`/admin/partners/${partner!.id}`, {
         businessName,
         phone,
-        businessTypeIds,
+        serviceTypeIds,
         isActive,
         shopLocations: sanitizeLocations(shopLocations),
         // TODO: supportingDocuments — frontend captures staged files for
@@ -568,15 +554,15 @@ function EditPartnerDialog({ partner, onClose }: EditPartnerDialogProps) {
             />
           </div>
           <div className="grid gap-2">
-            <Label>Business types</Label>
+            <Label>Service types</Label>
             <p className="text-xs text-muted-foreground">
               Pick all that apply (at least one).
             </p>
-            <BusinessTypePicker
-              options={businessTypesQuery.data?.data ?? []}
-              value={businessTypeIds}
-              onChange={setBusinessTypeIds}
-              loading={businessTypesQuery.isPending}
+            <ServiceTypePicker
+              options={serviceTypesQuery.data?.data ?? []}
+              value={serviceTypeIds}
+              onChange={setServiceTypeIds}
+              loading={serviceTypesQuery.isPending}
             />
           </div>
 
@@ -615,7 +601,7 @@ function EditPartnerDialog({ partner, onClose }: EditPartnerDialogProps) {
             </Button>
             <Button
               type="submit"
-              disabled={mutation.isPending || businessTypeIds.length === 0}
+              disabled={mutation.isPending || serviceTypeIds.length === 0}
             >
               {mutation.isPending ? 'Saving…' : 'Save changes'}
             </Button>
@@ -649,14 +635,14 @@ function PartnerDetailsDialog({ partner, onClose }: PartnerDetailsDialogProps) {
                 {partner.user.email} · {partner.phone}
               </p>
             </Section>
-            <Section label="Business types">
-              {partner.businessTypes.length === 0 ? (
+            <Section label="Service types">
+              {partner.serviceTypes.length === 0 ? (
                 <p className="text-muted-foreground italic">None</p>
               ) : (
                 <div className="flex flex-wrap gap-1.5">
-                  {partner.businessTypes.map((pbt) => (
-                    <Badge key={pbt.businessTypeId} variant="secondary">
-                      {pbt.businessType.name}
+                  {partner.serviceTypes.map((pbt) => (
+                    <Badge key={pbt.serviceTypeId} variant="secondary">
+                      {pbt.serviceType.name}
                     </Badge>
                   ))}
                 </div>
@@ -757,6 +743,9 @@ function PartnerDetailsDialog({ partner, onClose }: PartnerDetailsDialogProps) {
                 </ul>
               )}
             </Section>
+            <Section label="Review history">
+              <ApprovalHistory logs={partner.approvalLogs ?? []} />
+            </Section>
           </div>
         )}
         <DialogFooter>
@@ -786,46 +775,357 @@ function Section({
   );
 }
 
-type DeletePartnerDialogProps = {
+type ReviewPartnerDialogProps = {
   partner: Partner | null;
   onClose: () => void;
-  onConfirm: () => void;
-  isPending: boolean;
-  error: string | null;
 };
 
-function DeletePartnerDialog({
-  partner,
-  onClose,
-  onConfirm,
-  isPending,
-  error,
-}: DeletePartnerDialogProps) {
+function ReviewPartnerDialog({ partner, onClose }: ReviewPartnerDialogProps) {
+  const queryClient = useQueryClient();
+  const [comment, setComment] = useState('');
+  const [pendingAction, setPendingAction] = useState<ApprovalStatus | null>(null);
+
+  // Reset transient state whenever a different partner is targeted (or the
+  // dialog is closed).
+  useEffect(() => {
+    setComment('');
+    setPendingAction(null);
+  }, [partner?.id]);
+
+  const mutation = useMutation({
+    mutationFn: ({
+      approvalStatus,
+      approvalComment,
+    }: {
+      approvalStatus: ApprovalStatus;
+      approvalComment: string;
+    }) =>
+      api.patch(`/admin/partners/${partner!.id}/approval`, {
+        approvalStatus,
+        approvalComment,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: PARTNERS_KEY });
+      handleClose();
+    },
+    onSettled: () => setPendingAction(null),
+  });
+
+  const handleClose = () => {
+    mutation.reset();
+    onClose();
+  };
+
+  const submit = (approvalStatus: ApprovalStatus) => {
+    const trimmed = comment.trim();
+    if (trimmed.length < 5) return;
+    setPendingAction(approvalStatus);
+    mutation.mutate({ approvalStatus, approvalComment: trimmed });
+  };
+
+  const trimmedLength = comment.trim().length;
+  const commentError =
+    trimmedLength === 0
+      ? 'A comment is required.'
+      : trimmedLength < 5
+      ? 'Comment must be at least 5 characters.'
+      : comment.length > 500
+      ? 'Comment is too long (max 500 characters).'
+      : null;
+
+  const submitting = mutation.isPending;
+
+  const errorMessage =
+    mutation.error instanceof ApiError ? mutation.error.message : null;
+
   return (
-    <Dialog open={partner !== null} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent>
+    <Dialog
+      open={partner !== null}
+      onOpenChange={(next) => !next && !submitting && handleClose()}
+    >
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Delete partner</DialogTitle>
+          <DialogTitle>Review application</DialogTitle>
           <DialogDescription>
-            This permanently removes <strong>{partner?.businessName}</strong>{' '}
-            and their account. This cannot be undone.
+            {partner ? (
+              <>
+                Decide on <strong>{partner.businessName}</strong>'s application.
+                Your comment is shared with the partner and stored in their
+                application history.
+              </>
+            ) : (
+              ''
+            )}
           </DialogDescription>
         </DialogHeader>
-        {error && (
+
+        {partner && (
+          <div className="rounded-md border bg-muted/30 p-3 text-sm space-y-1">
+            <p>
+              <span className="text-muted-foreground">Email:</span>{' '}
+              {partner.user.email}
+            </p>
+            <p>
+              <span className="text-muted-foreground">Current status:</span>{' '}
+              <Badge variant={statusVariant[partner.approvalStatus]}>
+                {partner.approvalStatus}
+              </Badge>
+            </p>
+          </div>
+        )}
+
+        {partner && (
+          <ApprovalHistory logs={partner.approvalLogs ?? []} />
+        )}
+
+        <div className="grid gap-2">
+          <Label htmlFor="reviewComment">Comment</Label>
+          <textarea
+            id="reviewComment"
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            rows={4}
+            maxLength={500}
+            placeholder="e.g. Documents verified and application approved."
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={submitting}
+          />
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span className="text-destructive">{commentError ?? ' '}</span>
+            <span>{comment.length}/500</span>
+          </div>
+        </div>
+
+        {errorMessage && (
           <p className="text-sm text-destructive" role="alert">
-            {error}
+            {errorMessage}
           </p>
         )}
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+
+        <DialogFooter className="gap-2 sm:gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleClose}
+            disabled={submitting}
+          >
             Cancel
           </Button>
           <Button
+            type="button"
             variant="destructive"
-            onClick={onConfirm}
-            disabled={isPending}
+            onClick={() => submit('REJECTED')}
+            disabled={submitting || !!commentError}
           >
-            {isPending ? 'Deleting…' : 'Delete'}
+            <XCircle />
+            {submitting && pendingAction === 'REJECTED' ? 'Rejecting…' : 'Reject'}
+          </Button>
+          <Button
+            type="button"
+            onClick={() => submit('APPROVED')}
+            disabled={submitting || !!commentError}
+          >
+            <CheckCircle2 />
+            {submitting && pendingAction === 'APPROVED' ? 'Approving…' : 'Approve'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ApprovalHistory({ logs }: { logs: ApprovalLog[] }) {
+  if (logs.length === 0) {
+    return (
+      <div className="rounded-md border bg-muted/20 p-3 text-xs text-muted-foreground">
+        No review history yet.
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-md border bg-muted/20">
+      <div className="px-3 py-2 border-b text-xs font-medium text-muted-foreground">
+        Review history
+      </div>
+      <ol className="max-h-64 overflow-y-auto divide-y">
+        {logs.map((log) => (
+          <li key={log.id} className="px-3 py-2 text-sm space-y-1">
+            <div className="flex items-center gap-2">
+              <ApprovalActionBadge action={log.action} />
+              <span className="text-xs text-muted-foreground">
+                {formatLogTimestamp(log.createdAt)}
+              </span>
+            </div>
+            {log.comment && (
+              <p className="text-sm text-foreground/90">{log.comment}</p>
+            )}
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+function ApprovalActionBadge({ action }: { action: ApprovalAction }) {
+  const variant: 'default' | 'secondary' | 'destructive' | 'outline' =
+    action === 'APPROVED'
+      ? 'default'
+      : action === 'REJECTED'
+      ? 'destructive'
+      : action === 'RESUBMITTED'
+      ? 'secondary'
+      : 'outline';
+  return <Badge variant={variant}>{action}</Badge>;
+}
+
+function formatLogTimestamp(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString();
+}
+
+type BanPartnerDialogProps = {
+  partner: Partner | null;
+  onClose: () => void;
+};
+
+function BanPartnerDialog({ partner, onClose }: BanPartnerDialogProps) {
+  const queryClient = useQueryClient();
+  const [reason, setReason] = useState('');
+
+  useEffect(() => {
+    setReason('');
+  }, [partner?.id]);
+
+  const mutation = useMutation({
+    mutationFn: (body: { isBanned: boolean; bannedReason: string | null }) =>
+      api.patch(`/admin/partners/${partner!.id}/ban`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: PARTNERS_KEY });
+      handleClose();
+    },
+  });
+
+  const handleClose = () => {
+    mutation.reset();
+    onClose();
+  };
+
+  const isBanFlow = !!partner && !partner.isBanned;
+
+  const trimmedLength = reason.trim().length;
+  const reasonError = isBanFlow
+    ? trimmedLength === 0
+      ? 'A reason is required.'
+      : trimmedLength < 5
+      ? 'Reason must be at least 5 characters.'
+      : reason.length > 500
+      ? 'Reason is too long (max 500 characters).'
+      : null
+    : null;
+
+  const submit = () => {
+    if (!partner) return;
+    if (isBanFlow) {
+      const trimmed = reason.trim();
+      if (trimmed.length < 5) return;
+      mutation.mutate({ isBanned: true, bannedReason: trimmed });
+    } else {
+      mutation.mutate({ isBanned: false, bannedReason: null });
+    }
+  };
+
+  const submitting = mutation.isPending;
+
+  const errorMessage =
+    mutation.error instanceof ApiError ? mutation.error.message : null;
+
+  return (
+    <Dialog
+      open={partner !== null}
+      onOpenChange={(next) => !next && !submitting && handleClose()}
+    >
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>
+            {isBanFlow ? 'Ban partner' : 'Unban partner'}
+          </DialogTitle>
+          <DialogDescription>
+            {partner && isBanFlow && (
+              <>
+                Banning <strong>{partner.businessName}</strong> blocks them from
+                signing in and accepting bookings. Provide a reason — it's
+                stored on the account.
+              </>
+            )}
+            {partner && !isBanFlow && (
+              <>
+                Restore access for <strong>{partner.businessName}</strong>?
+                They'll be able to sign in and operate again.
+              </>
+            )}
+          </DialogDescription>
+        </DialogHeader>
+
+        {partner && !isBanFlow && partner.bannedReason && (
+          <div className="rounded-md border bg-muted/30 p-3 text-sm">
+            <p className="text-xs font-medium text-muted-foreground">
+              Original ban reason
+            </p>
+            <p className="mt-1">{partner.bannedReason}</p>
+          </div>
+        )}
+
+        {isBanFlow && (
+          <div className="grid gap-2">
+            <Label htmlFor="banReason">Reason</Label>
+            <textarea
+              id="banReason"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              rows={4}
+              maxLength={500}
+              placeholder="e.g. Repeated policy violations after multiple warnings."
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={submitting}
+            />
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span className="text-destructive">{reasonError ?? ' '}</span>
+              <span>{reason.length}/500</span>
+            </div>
+          </div>
+        )}
+
+        {errorMessage && (
+          <p className="text-sm text-destructive" role="alert">
+            {errorMessage}
+          </p>
+        )}
+
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleClose}
+            disabled={submitting}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant={isBanFlow ? 'destructive' : 'default'}
+            onClick={submit}
+            disabled={submitting || !!reasonError}
+          >
+            {isBanFlow ? <Ban /> : <ShieldCheck />}
+            {submitting
+              ? isBanFlow
+                ? 'Banning…'
+                : 'Unbanning…'
+              : isBanFlow
+              ? 'Ban partner'
+              : 'Unban partner'}
           </Button>
         </DialogFooter>
       </DialogContent>

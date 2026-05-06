@@ -3,7 +3,10 @@ import { Login } from '@/routes/Login';
 import { Register } from '@/routes/Register';
 import { VerifyPartnerEmail } from '@/routes/VerifyPartnerEmail';
 import { Dashboard } from '@/routes/Dashboard';
+import { Bookings } from '@/routes/Bookings';
+import { Application } from '@/routes/Application';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
+import { AppShell } from '@/components/AppShell';
 
 function App() {
   return (
@@ -12,7 +15,11 @@ function App() {
       <Route path="/register" element={<Register />} />
       <Route path="/verify-partner-email" element={<VerifyPartnerEmail />} />
       <Route element={<ProtectedRoute />}>
-        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/application" element={<Application />} />
+        <Route element={<AppShell />}>
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/bookings" element={<Bookings />} />
+        </Route>
       </Route>
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>

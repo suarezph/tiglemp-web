@@ -8,7 +8,6 @@ import type {
   BookingServiceType,
   BookingStatus,
   Customer,
-  ListResponse,
   MobileCarWashDetails,
   Partner,
 } from '@/types/api';
@@ -90,7 +89,7 @@ export function Bookings() {
 
   const bookingsQuery = useQuery({
     queryKey: BOOKINGS_KEY,
-    queryFn: () => api.get<ListResponse<Booking>>('/admin/bookings'),
+    queryFn: () => api.get<Booking[]>('/admin/bookings'),
   });
 
   const deleteMutation = useMutation({
@@ -275,12 +274,12 @@ function CreateBookingDialog({ open, onOpenChange }: CreateBookingDialogProps) {
 
   const customersQuery = useQuery({
     queryKey: CUSTOMERS_KEY,
-    queryFn: () => api.get<ListResponse<Customer>>('/admin/customers'),
+    queryFn: () => api.get<Customer[]>('/admin/customers'),
     enabled: open,
   });
   const partnersQuery = useQuery({
     queryKey: PARTNERS_KEY,
-    queryFn: () => api.get<ListResponse<Partner>>('/admin/partners'),
+    queryFn: () => api.get<Partner[]>('/admin/partners'),
     enabled: open,
   });
 
@@ -696,7 +695,7 @@ function AssignPartnerDialog({ booking, onClose }: AssignPartnerDialogProps) {
 
   const partnersQuery = useQuery({
     queryKey: PARTNERS_KEY,
-    queryFn: () => api.get<ListResponse<Partner>>('/admin/partners'),
+    queryFn: () => api.get<Partner[]>('/admin/partners'),
     enabled: booking !== null,
   });
 

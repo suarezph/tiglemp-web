@@ -7,7 +7,6 @@ export type AuthUser = {
 };
 
 export type LoginResponse = {
-  message: string;
   token: string;
   user: AuthUser;
 };
@@ -33,7 +32,7 @@ export type EmbeddedUser = {
   createdAt: string;
 };
 
-export type BusinessType = {
+export type ServiceType = {
   id: string;
   code: string;
   name: string;
@@ -41,11 +40,11 @@ export type BusinessType = {
   updatedAt: string;
 };
 
-export type PartnerBusinessType = {
+export type PartnerServiceType = {
   partnerId: string;
-  businessTypeId: string;
+  serviceTypeId: string;
   createdAt: string;
-  businessType: BusinessType;
+  serviceType: ServiceType;
 };
 
 export type PartnerDocument = {
@@ -79,6 +78,21 @@ export type PartnerShopLocationInput = Address & {
   isDefault?: boolean;
 };
 
+export type ApprovalAction =
+  | 'SUBMITTED'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'RESUBMITTED';
+
+export type ApprovalLog = {
+  id: string;
+  partnerId: string;
+  actorId: string | null;
+  action: ApprovalAction;
+  comment: string | null;
+  createdAt: string;
+};
+
 export type Partner = {
   id: string;
   businessName: string;
@@ -86,11 +100,15 @@ export type Partner = {
   approvalStatus: ApprovalStatus;
   approvalComment: string | null;
   approvedAt: string | null;
+  isBanned: boolean;
+  bannedAt: string | null;
+  bannedReason: string | null;
   createdAt: string;
   user: EmbeddedUser;
-  businessTypes: PartnerBusinessType[];
+  serviceTypes: PartnerServiceType[];
   documents: PartnerDocument[];
   shopLocations: PartnerShopLocation[];
+  approvalLogs?: ApprovalLog[];
 };
 
 export type Customer = {
@@ -156,4 +174,3 @@ export type Booking = {
   createdAt: string;
 };
 
-export type ListResponse<T> = { data: T[] };

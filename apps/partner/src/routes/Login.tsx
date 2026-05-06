@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
-import { api, ApiError } from '@/lib/api';
+import { api, ApiError, generalApiErrorMessage } from '@/lib/api';
 import { setVerifyContext } from '@/lib/verify-context';
 import { useAuthStore } from '@/stores/auth';
 import type { LoginResponse } from '@/types/api';
@@ -19,18 +19,20 @@ export function Login() {
   const mutation = useMutation({
     mutationFn: () =>
       api.post<LoginResponse>('/auth/login', { email, password }),
-    onSuccess: (data) => {
-      if (data.user.role !== 'PARTNER') {
+    onSuccess: (response) => {
+      const { user, token } = response.data;
+      if (user.role !== 'PARTNER') {
         mutation.reset();
         return;
       }
-      setSession(data.token, data.user);
-      navigate('/dashboard', { replace: true });
+      setSession(token, user);
+      const target =
+        user.approvalStatus === 'APPROVED' ? '/dashboard' : '/application';
+      navigate(target, { replace: true });
     },
     onError: (error) => {
       if (!(error instanceof ApiError)) return;
-      const body = error.body as { code?: string } | null;
-      if (body?.code === 'EMAIL_NOT_VERIFIED') {
+      if (error.code === 'EMAIL_NOT_VERIFIED') {
         setVerifyContext({ source: 'login', message: error.message });
         const params = new URLSearchParams();
         params.set('email', email);
@@ -45,22 +47,23 @@ export function Login() {
   };
 
   const errorBanner = (() => {
-    if (mutation.data && mutation.data.user.role !== 'PARTNER') {
+    if (mutation.data && mutation.data.data.user.role !== 'PARTNER') {
       return {
         message: 'This account is not registered as a partner.',
         showSupport: false,
       };
     }
     if (!mutation.error) return null;
-    if (!(mutation.error instanceof ApiError)) {
-      return { message: 'Unexpected error', showSupport: false };
+    if (mutation.error instanceof ApiError) {
+      if (mutation.error.code === 'EMAIL_NOT_VERIFIED') return null;
+      const showSupport =
+        mutation.error.code === 'ACCOUNT_BANNED' ||
+        mutation.error.code === 'ACCOUNT_INACTIVE';
+      const message = generalApiErrorMessage(mutation.error);
+      if (!message) return null;
+      return { message, showSupport };
     }
-    const body = mutation.error.body as { code?: string } | null;
-    if (body?.code === 'EMAIL_NOT_VERIFIED') return null;
-    if (body?.code === 'ACCOUNT_BANNED' || body?.code === 'ACCOUNT_INACTIVE') {
-      return { message: mutation.error.message, showSupport: true };
-    }
-    return { message: mutation.error.message, showSupport: false };
+    return { message: 'Unexpected error', showSupport: false };
   })();
 
   return (

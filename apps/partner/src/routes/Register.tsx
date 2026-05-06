@@ -3,15 +3,19 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { api, ApiError } from '@/lib/api';
+import {
+  api,
+  ApiError,
+  collectFieldErrors,
+  generalApiErrorMessage,
+} from '@/lib/api';
 import { setVerifyContext, clearVerifyContext } from '@/lib/verify-context';
 import type {
-  BusinessType,
-  ListResponse,
+  ServiceType,
   RegisterPartnerResponse,
 } from '@/types/api';
 import { AuthLayout } from '@/components/AuthLayout';
-import { BusinessTypePicker } from '@/components/BusinessTypePicker';
+import { ServiceTypePicker } from '@/components/ServiceTypePicker';
 import { Button } from '@/components/ui/button';
 import {
   Form,
@@ -30,10 +34,10 @@ const registerSchema = z
       .string()
       .min(2, 'Business name must be at least 2 characters')
       .max(120, 'Business name is too long'),
-    businessTypeIds: z
+    serviceTypeIds: z
       .array(z.string())
-      .min(1, 'Pick at least one business type')
-      .max(10, 'Too many business types selected'),
+      .min(1, 'Pick at least one service type')
+      .max(10, 'Too many service types selected'),
     phone: z
       .string()
       .min(7, 'Phone must be at least 7 characters')
@@ -63,7 +67,7 @@ export function Register() {
     resolver: zodResolver(registerSchema),
     defaultValues: {
       businessName: '',
-      businessTypeIds: [],
+      serviceTypeIds: [],
       phone: '',
       email: '',
       password: '',
@@ -72,9 +76,9 @@ export function Register() {
     mode: 'onBlur',
   });
 
-  const businessTypesQuery = useQuery({
-    queryKey: ['meta', 'business-types'],
-    queryFn: () => api.get<ListResponse<BusinessType>>('/meta/business-types'),
+  const serviceTypesQuery = useQuery({
+    queryKey: ['meta', 'service-types'],
+    queryFn: () => api.get<ServiceType[]>('/meta/service-types'),
   });
 
   const mutation = useMutation({
@@ -82,13 +86,13 @@ export function Register() {
       api.post<RegisterPartnerResponse>('/auth/register/partner', {
         email: values.email,
         password: values.password,
-        businessTypeIds: values.businessTypeIds,
+        serviceTypeIds: values.serviceTypeIds,
         businessName: values.businessName,
         phone: values.phone,
       }),
-    onSuccess: (data, variables) => {
-      if (data.message) {
-        setVerifyContext({ source: 'register', message: data.message });
+    onSuccess: (response, variables) => {
+      if (response.message) {
+        setVerifyContext({ source: 'register', message: response.message });
       } else {
         clearVerifyContext();
       }
@@ -100,17 +104,11 @@ export function Register() {
     },
     onError: (error) => {
       if (!(error instanceof ApiError)) return;
-      const body = error.body as
-        | {
-            code?: string;
-            details?: { fieldErrors?: Record<string, string[] | undefined> };
-          }
-        | null;
-      const fieldErrors = body?.details?.fieldErrors;
-      if (body?.code !== 'VALIDATION_ERROR' || !fieldErrors) return;
+      const fieldErrors = error.fieldErrors;
+      if (!fieldErrors) return;
       const formFields: Array<keyof RegisterFormValues> = [
         'businessName',
-        'businessTypeIds',
+        'serviceTypeIds',
         'phone',
         'email',
         'password',
@@ -118,8 +116,8 @@ export function Register() {
       ];
       let firstField: keyof RegisterFormValues | null = null;
       for (const name of formFields) {
-        const messages = fieldErrors[name];
-        if (!messages?.length) continue;
+        const messages = collectFieldErrors(fieldErrors, name);
+        if (messages.length === 0) continue;
         form.setError(name, { type: 'server', message: messages.join(' ') });
         if (!firstField) firstField = name;
       }
@@ -129,15 +127,7 @@ export function Register() {
 
   const onSubmit = form.handleSubmit((values) => mutation.mutate(values));
 
-  const generalError = (() => {
-    if (!mutation.error) return null;
-    if (mutation.error instanceof ApiError) {
-      const body = mutation.error.body as { code?: string } | null;
-      if (body?.code === 'VALIDATION_ERROR') return null;
-      return mutation.error.message;
-    }
-    return 'Unexpected error. Please try again.';
-  })();
+  const generalError = generalApiErrorMessage(mutation.error);
 
   return (
     <AuthLayout>
@@ -167,18 +157,18 @@ export function Register() {
 
             <FormField
               control={form.control}
-              name="businessTypeIds"
+              name="serviceTypeIds"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Business types</FormLabel>
+                  <FormLabel>Service types</FormLabel>
                   <FormDescription>Pick all that apply.</FormDescription>
                   <FormControl>
                     <div>
-                      <BusinessTypePicker
-                        options={businessTypesQuery.data?.data ?? []}
+                      <ServiceTypePicker
+                        options={serviceTypesQuery.data?.data ?? []}
                         value={field.value}
                         onChange={field.onChange}
-                        loading={businessTypesQuery.isPending}
+                        loading={serviceTypesQuery.isPending}
                       />
                     </div>
                   </FormControl>
@@ -275,7 +265,7 @@ export function Register() {
             <Button
               type="submit"
               className="w-full"
-              disabled={mutation.isPending || businessTypesQuery.isPending}
+              disabled={mutation.isPending || serviceTypesQuery.isPending}
             >
               {mutation.isPending ? 'Creating account…' : 'Create Account'}
             </Button>

@@ -13,7 +13,6 @@ import { api } from '@/lib/api';
 import type {
   Booking,
   Customer,
-  ListResponse,
   Partner,
 } from '@/types/api';
 import { Button } from '@/components/ui/button';
@@ -102,15 +101,15 @@ export function Dashboard() {
 
   const partnersQuery = useQuery({
     queryKey: ['admin', 'partners'],
-    queryFn: () => api.get<ListResponse<Partner>>('/admin/partners'),
+    queryFn: () => api.get<Partner[]>('/admin/partners'),
   });
   const customersQuery = useQuery({
     queryKey: ['admin', 'customers'],
-    queryFn: () => api.get<ListResponse<Customer>>('/admin/customers'),
+    queryFn: () => api.get<Customer[]>('/admin/customers'),
   });
   const bookingsQuery = useQuery({
     queryKey: ['admin', 'bookings'],
-    queryFn: () => api.get<ListResponse<Booking>>('/admin/bookings'),
+    queryFn: () => api.get<Booking[]>('/admin/bookings'),
   });
 
   const partners = partnersQuery.data?.data ?? [];

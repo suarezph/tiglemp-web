@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { MoreHorizontal, Plus } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
-import type { Address, Customer, ListResponse } from '@/types/api';
+import type { Address, Customer } from '@/types/api';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -44,7 +44,7 @@ export function Customers() {
 
   const customersQuery = useQuery({
     queryKey: CUSTOMERS_KEY,
-    queryFn: () => api.get<ListResponse<Customer>>('/admin/customers'),
+    queryFn: () => api.get<Customer[]>('/admin/customers'),
   });
 
   const deleteMutation = useMutation({

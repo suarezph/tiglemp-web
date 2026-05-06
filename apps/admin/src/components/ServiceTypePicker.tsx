@@ -1,22 +1,22 @@
 import { Check } from 'lucide-react';
-import type { BusinessType } from '@/types/api';
+import type { ServiceType } from '@/types/api';
 import { cn } from '@/lib/utils';
 
-type BusinessTypePickerProps = {
-  options: BusinessType[];
+type ServiceTypePickerProps = {
+  options: ServiceType[];
   value: string[];
   onChange: (next: string[]) => void;
   loading?: boolean;
   disabled?: boolean;
 };
 
-export function BusinessTypePicker({
+export function ServiceTypePicker({
   options,
   value,
   onChange,
   loading,
   disabled,
-}: BusinessTypePickerProps) {
+}: ServiceTypePickerProps) {
   const toggle = (id: string) => {
     if (disabled) return;
     onChange(
@@ -26,14 +26,14 @@ export function BusinessTypePicker({
 
   if (loading) {
     return (
-      <p className="text-sm text-muted-foreground">Loading business types…</p>
+      <p className="text-sm text-muted-foreground">Loading service types…</p>
     );
   }
 
   if (options.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
-        No business types available.
+        No service types available.
       </p>
     );
   }
