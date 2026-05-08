@@ -356,6 +356,10 @@ function DetailsCard({ application }: { application: PartnerApplication }) {
       <CardContent className="space-y-5">
         <Field label="Business name" value={application.businessName} />
         <Field label="Phone" value={application.phone} />
+        <Field
+          label="Team seats"
+          value={`${application.partnerUserLimit} total partner user accounts`}
+        />
         <div>
           <p className="text-xs font-medium text-muted-foreground">
             Service types

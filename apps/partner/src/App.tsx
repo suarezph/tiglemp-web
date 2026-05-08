@@ -4,6 +4,7 @@ import { Register } from '@/routes/Register';
 import { VerifyPartnerEmail } from '@/routes/VerifyPartnerEmail';
 import { Dashboard } from '@/routes/Dashboard';
 import { Bookings } from '@/routes/Bookings';
+import { Team } from '@/routes/Team';
 import { Application } from '@/routes/Application';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { AppShell } from '@/components/AppShell';
@@ -18,6 +19,7 @@ function App() {
         <Route path="/application" element={<Application />} />
         <Route element={<AppShell />}>
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/team" element={<Team />} />
           <Route path="/bookings" element={<Bookings />} />
         </Route>
       </Route>

@@ -4,6 +4,82 @@ export type AuthUser = {
   id: string;
   email: string;
   role: UserRole;
+  isSuperAdmin?: boolean;
+};
+
+export type Permission = {
+  id: string;
+  key: string;
+  name: string;
+  description: string | null;
+  roles: UserRole[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+/**
+ * Shape returned by `GET /auth/me`. Includes the basic account record plus
+ * the resolved permission keys (`permissions`) and the keys explicitly
+ * assigned to this user (`assignedPermissionKeys`). Only the profile slot
+ * matching `role` is populated.
+ */
+export type MeResponse = {
+  id: string;
+  email: string;
+  role: UserRole;
+  isActive: boolean;
+  isSuperAdmin: boolean;
+  isPartnerRoot: boolean;
+  emailVerifiedAt: string | null;
+  permissions: string[];
+  assignedPermissionKeys: string[];
+  adminProfile: AdminProfile | null;
+  // Lightweight profile summaries for partner / customer users — typed loose
+  // here because admin app rarely cares about the inner shape.
+  partnerProfile: { id: string; businessName: string } | null;
+  customerProfile: { id: string; fullName: string | null } | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/**
+ * Shape returned by `GET /admin/users/:id/permissions` and
+ * `GET /partner/users/:id/permissions`.
+ */
+export type UserPermissionsResponse = {
+  user: {
+    id: string;
+    email: string;
+    role: UserRole;
+    isActive: boolean;
+    isPartnerRoot?: boolean;
+    isSuperAdmin?: boolean;
+  };
+  assignedPermissionKeys: string[];
+  effectivePermissionKeys: string[];
+};
+
+export type AdminProfile = {
+  id: string;
+  userId: string;
+  fullName: string;
+  phone: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AdminUser = {
+  id: string;
+  email: string;
+  role: 'ADMIN';
+  isActive: boolean;
+  isPartnerRoot: boolean;
+  isSuperAdmin: boolean;
+  adminProfile: AdminProfile | null;
+  createdAt: string;
+  updatedAt: string;
+  assignedPermissionKeys: string[];
+  effectivePermissionKeys: string[];
 };
 
 export type LoginResponse = {
@@ -93,10 +169,19 @@ export type ApprovalLog = {
   createdAt: string;
 };
 
+export type PartnerUser = {
+  id: string;
+  email: string;
+  isActive: boolean;
+  isPartnerRoot: boolean;
+  createdAt: string;
+};
+
 export type Partner = {
   id: string;
   businessName: string;
   phone: string;
+  partnerUserLimit: number;
   approvalStatus: ApprovalStatus;
   approvalComment: string | null;
   approvedAt: string | null;
@@ -104,7 +189,7 @@ export type Partner = {
   bannedAt: string | null;
   bannedReason: string | null;
   createdAt: string;
-  user: EmbeddedUser;
+  users: PartnerUser[];
   serviceTypes: PartnerServiceType[];
   documents: PartnerDocument[];
   shopLocations: PartnerShopLocation[];

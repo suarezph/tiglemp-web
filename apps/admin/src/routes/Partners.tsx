@@ -20,6 +20,7 @@ import type {
   ServiceType,
   Partner,
   PartnerShopLocationInput,
+  PartnerUser,
 } from '@/types/api';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -72,6 +73,10 @@ const statusVariant: Record<
   PENDING: 'secondary',
   REJECTED: 'destructive',
 };
+
+function rootUserOf(partner: Partner): PartnerUser | undefined {
+  return partner.users?.find((u) => u.isPartnerRoot) ?? partner.users?.[0];
+}
 
 const sanitizeLocations = (
   locations: PartnerShopLocationInput[]
@@ -157,7 +162,11 @@ export function Partners() {
                   <TableCell className="font-medium">
                     {partner.businessName}
                   </TableCell>
-                  <TableCell>{partner.user.email}</TableCell>
+                  <TableCell>
+                    {rootUserOf(partner)?.email ?? (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
                   <TableCell>{partner.phone}</TableCell>
                   <TableCell>
                     {partner.shopLocations.length === 0 ? (
@@ -457,6 +466,7 @@ function EditPartnerDialog({ partner, onClose }: EditPartnerDialogProps) {
   const [phone, setPhone] = useState('');
   const [serviceTypeIds, setServiceTypeIds] = useState<string[]>([]);
   const [isActive, setIsActive] = useState(true);
+  const [partnerUserLimit, setPartnerUserLimit] = useState<number>(1);
   const [shopLocations, setShopLocations] = useState<
     PartnerShopLocationInput[]
   >([]);
@@ -469,7 +479,8 @@ function EditPartnerDialog({ partner, onClose }: EditPartnerDialogProps) {
     setBusinessName(partner.businessName);
     setPhone(partner.phone);
     setServiceTypeIds(partner.serviceTypes.map((pbt) => pbt.serviceTypeId));
-    setIsActive(partner.user.isActive);
+    setIsActive(rootUserOf(partner)?.isActive ?? true);
+    setPartnerUserLimit(partner.partnerUserLimit);
     setShopLocations(
       partner.shopLocations.map((loc) => ({
         label: loc.label,
@@ -496,6 +507,7 @@ function EditPartnerDialog({ partner, onClose }: EditPartnerDialogProps) {
         phone,
         serviceTypeIds,
         isActive,
+        partnerUserLimit,
         shopLocations: sanitizeLocations(shopLocations),
         // TODO: supportingDocuments — frontend captures staged files for
         // future upload, but we don't include them in the PUT payload yet.
@@ -552,6 +564,24 @@ function EditPartnerDialog({ partner, onClose }: EditPartnerDialogProps) {
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
             />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="editPartnerUserLimit">Team seats</Label>
+            <Input
+              id="editPartnerUserLimit"
+              type="number"
+              required
+              min={1}
+              max={50}
+              value={partnerUserLimit}
+              onChange={(e) =>
+                setPartnerUserLimit(Number(e.target.value) || 1)
+              }
+            />
+            <p className="text-xs text-muted-foreground">
+              Total partner user accounts allowed (root partner counts toward
+              this limit). Currently {partner?.users?.length ?? 0} in use.
+            </p>
           </div>
           <div className="grid gap-2">
             <Label>Service types</Label>
@@ -632,7 +662,10 @@ function PartnerDetailsDialog({ partner, onClose }: PartnerDetailsDialogProps) {
             <Section label="Business">
               <p className="font-medium">{partner.businessName}</p>
               <p className="text-muted-foreground">
-                {partner.user.email} · {partner.phone}
+                {rootUserOf(partner)?.email
+                  ? `${rootUserOf(partner)?.email} · `
+                  : ''}
+                {partner.phone}
               </p>
             </Section>
             <Section label="Service types">
@@ -663,6 +696,34 @@ function PartnerDetailsDialog({ partner, onClose }: PartnerDetailsDialogProps) {
                 <p className="text-muted-foreground mt-1">
                   Comment: {partner.approvalComment}
                 </p>
+              )}
+            </Section>
+            <Section label="Team seats">
+              <p>
+                <span className="font-medium">
+                  {partner.users?.length ?? 0} / {partner.partnerUserLimit}
+                </span>{' '}
+                <span className="text-muted-foreground">
+                  partner user accounts in use
+                </span>
+              </p>
+              {partner.users?.length > 0 && (
+                <ul className="mt-2 space-y-1">
+                  {partner.users.map((u) => (
+                    <li
+                      key={u.id}
+                      className="flex items-center gap-2 text-xs text-muted-foreground"
+                    >
+                      <span className="text-foreground">{u.email}</span>
+                      {u.isPartnerRoot && (
+                        <Badge variant="secondary">Root</Badge>
+                      )}
+                      {!u.isActive && (
+                        <Badge variant="destructive">Inactive</Badge>
+                      )}
+                    </li>
+                  ))}
+                </ul>
               )}
             </Section>
             <Section label={`Shop locations (${partner.shopLocations.length})`}>
@@ -863,7 +924,7 @@ function ReviewPartnerDialog({ partner, onClose }: ReviewPartnerDialogProps) {
           <div className="rounded-md border bg-muted/30 p-3 text-sm space-y-1">
             <p>
               <span className="text-muted-foreground">Email:</span>{' '}
-              {partner.user.email}
+              {rootUserOf(partner)?.email ?? '—'}
             </p>
             <p>
               <span className="text-muted-foreground">Current status:</span>{' '}

@@ -5,6 +5,7 @@ import {
   ChevronsUpDown,
   LayoutDashboard,
   LogOut,
+  Shield,
   Sparkles,
   Users,
 } from 'lucide-react';
@@ -45,15 +46,28 @@ import {
   SidebarTrigger,
 } from '@/components/ui/sidebar';
 
-const navItems = [
+type NavItem = {
+  to: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  superAdminOnly?: boolean;
+};
+
+const ALL_NAV_ITEMS: NavItem[] = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  {
+    to: '/admin-users',
+    label: 'Admin Users',
+    icon: Shield,
+    superAdminOnly: true,
+  },
   { to: '/partners', label: 'Partners', icon: Building2 },
   { to: '/customers', label: 'Customers', icon: Users },
   { to: '/bookings', label: 'Bookings', icon: CalendarCheck },
 ];
 
 const titleFor = (pathname: string) =>
-  navItems.find((item) => pathname.startsWith(item.to))?.label ?? 'Admin';
+  ALL_NAV_ITEMS.find((item) => pathname.startsWith(item.to))?.label ?? 'Admin';
 
 export function AppShell() {
   const location = useLocation();
@@ -90,6 +104,10 @@ export function AppShell() {
 
 function AdminSidebar() {
   const location = useLocation();
+  const user = useAuthStore((s) => s.user);
+  const navItems = ALL_NAV_ITEMS.filter(
+    (item) => !item.superAdminOnly || user?.isSuperAdmin
+  );
 
   return (
     <Sidebar collapsible="icon">

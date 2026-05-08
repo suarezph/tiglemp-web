@@ -5,6 +5,7 @@ import {
   LayoutDashboard,
   LogOut,
   Sparkles,
+  Users,
 } from 'lucide-react';
 
 import { useAuthStore } from '@/stores/auth';
@@ -43,13 +44,21 @@ import {
   SidebarTrigger,
 } from '@/components/ui/sidebar';
 
-const navItems = [
+type NavItem = {
+  to: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  rootOnly?: boolean;
+};
+
+const ALL_NAV_ITEMS: NavItem[] = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { to: '/team', label: 'Team', icon: Users, rootOnly: true },
   { to: '/bookings', label: 'Bookings', icon: CalendarCheck },
 ];
 
 const titleFor = (pathname: string) =>
-  navItems.find((item) => pathname.startsWith(item.to))?.label ?? 'Partner';
+  ALL_NAV_ITEMS.find((item) => pathname.startsWith(item.to))?.label ?? 'Partner';
 
 export function AppShell() {
   const location = useLocation();
@@ -93,6 +102,10 @@ export function AppShell() {
 
 function PartnerSidebar() {
   const location = useLocation();
+  const user = useAuthStore((s) => s.user);
+  const navItems = ALL_NAV_ITEMS.filter(
+    (item) => !item.rootOnly || user?.isPartnerRoot
+  );
 
   return (
     <Sidebar collapsible="icon">

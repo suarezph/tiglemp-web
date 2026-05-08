@@ -825,7 +825,13 @@ function ViewBookingDialog({ booking, onClose }: ViewBookingDialogProps) {
                 <>
                   <p>{booking.partner.businessName}</p>
                   <p className="text-muted-foreground">
-                    {booking.partner.user.email} · {booking.partner.phone}
+                    {(() => {
+                      const root =
+                        booking.partner.users?.find((u) => u.isPartnerRoot) ??
+                        booking.partner.users?.[0];
+                      return root?.email ? `${root.email} · ` : '';
+                    })()}
+                    {booking.partner.phone}
                   </p>
                 </>
               ) : (

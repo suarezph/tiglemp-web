@@ -8,6 +8,66 @@ export type AuthUser = {
   role: UserRole;
   approvalStatus?: ApprovalStatus;
   isBanned?: boolean;
+  isPartnerRoot?: boolean;
+};
+
+/**
+ * Shape returned by `GET /auth/me`. Includes the basic account record plus
+ * resolved permission keys (`permissions`) and explicitly assigned keys
+ * (`assignedPermissionKeys`). Only the profile slot matching `role` is
+ * populated.
+ */
+export type MeResponse = {
+  id: string;
+  email: string;
+  role: UserRole;
+  isActive: boolean;
+  isSuperAdmin: boolean;
+  isPartnerRoot: boolean;
+  emailVerifiedAt: string | null;
+  permissions: string[];
+  assignedPermissionKeys: string[];
+  partnerProfile:
+    | {
+        id: string;
+        businessName: string;
+        phone: string;
+        partnerUserLimit: number;
+        approvalStatus: ApprovalStatus;
+        isBanned: boolean;
+      }
+    | null;
+  adminProfile: { id: string; fullName: string | null } | null;
+  customerProfile: { id: string; fullName: string | null } | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/**
+ * Shape returned by `GET /partner/users/:id/permissions`.
+ */
+export type PartnerUserPermissionsResponse = {
+  user: {
+    id: string;
+    email: string;
+    role: UserRole;
+    isActive: boolean;
+    isPartnerRoot: boolean;
+  };
+  assignedPermissionKeys: string[];
+  effectivePermissionKeys: string[];
+};
+
+export type PartnerStaffUser = {
+  id: string;
+  email: string;
+  role: 'PARTNER';
+  isActive: boolean;
+  isPartnerRoot: boolean;
+  createdAt: string;
+  updatedAt: string;
+  assignedPermissionKeys: string[];
+  effectivePermissionKeys: string[];
 };
 
 export type LoginResponse = {
@@ -111,9 +171,10 @@ export type ApprovalLog = {
 
 export type PartnerApplication = {
   id: string;
-  userId: string;
+  userId?: string;
   businessName: string;
   phone: string;
+  partnerUserLimit: number;
   approvalStatus: ApprovalStatus;
   approvalComment: string | null;
   approvedAt: string | null;
