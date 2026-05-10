@@ -1,4 +1,3 @@
-import { Sparkles } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 type AuthLayoutProps = {
@@ -11,8 +10,13 @@ export function AuthLayout({ children }: AuthLayoutProps) {
       {/* Left: form column */}
       <div className="flex flex-col p-6 md:p-10">
         <div className="flex items-center gap-2">
-          <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <Sparkles className="size-4" />
+          <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary overflow-hidden">
+            <img
+              src="/logo-tiger.png"
+              alt=""
+              aria-hidden="true"
+              className="size-7 object-contain [filter:brightness(0)_invert(1)]"
+            />
           </div>
           <span className="font-semibold">Tiglemp Partner</span>
         </div>

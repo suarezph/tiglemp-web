@@ -10,6 +10,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { api, ApiError, collectFieldErrors } from '@/lib/api';
+import { useMe } from '@/lib/auth';
 import { useAuthStore } from '@/stores/auth';
 import {
   PERMISSION_GROUPS,
@@ -60,6 +61,7 @@ const KNOWN_FORM_FIELDS = ['email', 'password'] as const;
 
 export function Team() {
   const currentUser = useAuthStore((s) => s.user);
+  const me = useMe();
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<PartnerStaffUser | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<PartnerStaffUser | null>(
@@ -73,18 +75,40 @@ export function Team() {
   });
 
   const users = query.data?.data ?? [];
+  const limit = me?.partnerProfile?.partnerUserLimit ?? null;
+  const used = users.length;
+  const atLimit = limit !== null && used >= limit;
 
   return (
     <>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 gap-4">
         <div>
           <h1 className="text-2xl font-semibold">Team</h1>
           <p className="text-sm text-muted-foreground">
             Manage your team members and what they can do. Only the root
             partner account can manage this list.
           </p>
+          {limit !== null && !query.isPending && (
+            <p
+              className={cn(
+                'mt-2 text-sm',
+                atLimit ? 'text-destructive' : 'text-muted-foreground'
+              )}
+            >
+              <span className="font-medium">
+                {used} of {limit} seats used
+              </span>
+              {atLimit && (
+                <span> — remove a team member to add another.</span>
+              )}
+            </p>
+          )}
         </div>
-        <Button onClick={() => setCreateOpen(true)}>
+        <Button
+          onClick={() => setCreateOpen(true)}
+          disabled={atLimit}
+          title={atLimit ? 'Team seat limit reached' : undefined}
+        >
           <Plus />
           Add team member
         </Button>
@@ -214,6 +238,9 @@ export function Team() {
       <CreateUserDialog
         open={createOpen}
         onOpenChange={setCreateOpen}
+        atLimit={atLimit}
+        used={used}
+        limit={limit}
       />
       <EditUserDialog
         target={editTarget}
@@ -280,9 +307,15 @@ const emptyForm: FormState = {
 function CreateUserDialog({
   open,
   onOpenChange,
+  atLimit,
+  used,
+  limit,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  atLimit: boolean;
+  used: number;
+  limit: number | null;
 }) {
   const queryClient = useQueryClient();
   const [form, setForm] = useState<FormState>(emptyForm);
@@ -326,6 +359,23 @@ function CreateUserDialog({
             adjusted later.
           </DialogDescription>
         </DialogHeader>
+
+        {atLimit && (
+          <div
+            role="alert"
+            className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
+          >
+            Team seat limit reached
+            {limit !== null && (
+              <span className="text-destructive/80">
+                {' '}
+                ({used} of {limit} seats used)
+              </span>
+            )}
+            . Remove a team member or contact support to increase the limit.
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="grid gap-5">
           <UserFormFields
             mode="create"
@@ -342,7 +392,10 @@ function CreateUserDialog({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={mutation.isPending}>
+            <Button
+              type="submit"
+              disabled={mutation.isPending || atLimit}
+            >
               {mutation.isPending ? 'Creating…' : 'Create team member'}
             </Button>
           </DialogFooter>

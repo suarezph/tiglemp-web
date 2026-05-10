@@ -71,13 +71,16 @@ export type AdminProfile = {
 export type AdminUser = {
   id: string;
   email: string;
-  role: 'ADMIN';
+  role: UserRole;
   isActive: boolean;
   isPartnerRoot: boolean;
   isSuperAdmin: boolean;
   adminProfile: AdminProfile | null;
+  partnerProfileId?: string | null;
   createdAt: string;
   updatedAt: string;
+  deletedAt?: string | null;
+  deletedReason?: string | null;
   assignedPermissionKeys: string[];
   effectivePermissionKeys: string[];
 };

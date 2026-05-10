@@ -4,7 +4,6 @@ import {
   ChevronsUpDown,
   LayoutDashboard,
   LogOut,
-  Sparkles,
   Users,
 } from 'lucide-react';
 
@@ -114,8 +113,13 @@ function PartnerSidebar() {
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
               <Link to="/dashboard">
-                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                  <Sparkles className="size-4" />
+                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary overflow-hidden">
+                  <img
+                    src="/logo-tiger.png"
+                    alt=""
+                    aria-hidden="true"
+                    className="size-7 object-contain [filter:brightness(0)_invert(1)]"
+                  />
                 </div>
                 <div className="grid flex-1 text-left text-sm leading-tight">
                   <span className="truncate font-semibold">Tiglemp</span>

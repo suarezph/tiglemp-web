@@ -214,7 +214,7 @@ export function AdminUsers() {
                             disabled={isSelf}
                             onClick={() => !isSelf && setDeleteTarget(u)}
                           >
-                            Delete
+                            Remove
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -741,10 +741,10 @@ function DeleteAdminUserDialog({
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Delete admin user</DialogTitle>
+          <DialogTitle>Remove admin user</DialogTitle>
           <DialogDescription>
-            This permanently removes <strong>{target?.email}</strong>. They
-            will no longer be able to sign in.
+            <strong>{target?.email}</strong> will be archived and lose sign-in
+            access. You can restore them later from the Deleted Users page.
           </DialogDescription>
         </DialogHeader>
         {errorMessage && (
@@ -761,7 +761,7 @@ function DeleteAdminUserDialog({
             onClick={() => mutation.mutate()}
             disabled={mutation.isPending}
           >
-            {mutation.isPending ? 'Deleting…' : 'Delete'}
+            {mutation.isPending ? 'Removing…' : 'Remove'}
           </Button>
         </DialogFooter>
       </DialogContent>

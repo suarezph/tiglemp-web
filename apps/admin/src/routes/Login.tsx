@@ -50,7 +50,17 @@ export function Login() {
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-muted/40">
       <Card className="w-full max-w-sm">
-        <CardHeader>
+        <CardHeader className='text-center'>
+          <div className="flex justify-center mb-2">
+            <div className="grid place-items-center size-14 rounded-2xl bg-foreground/[0.04] ring-1 ring-border">
+              <img
+                src="/logo-tiger.png"
+                alt=""
+                aria-hidden="true"
+                className="size-10 object-contain"
+              />
+            </div>
+          </div>
           <CardTitle className="text-xl">Admin Sign In</CardTitle>
           <CardDescription>
             Sign in with your administrator credentials.
