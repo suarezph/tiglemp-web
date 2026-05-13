@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { MapPin, Search } from 'lucide-react';
 import { api } from '@/lib/api';
@@ -11,6 +12,7 @@ type SearchFormProps = {
 };
 
 export function SearchForm({ serviceId }: SearchFormProps) {
+  const navigate = useNavigate();
   const [region, setRegion] = useState<string | null>(null);
   const [city, setCity] = useState<string | null>(null);
   const [datetime, setDatetime] = useState<Date | null>(null);
@@ -47,14 +49,16 @@ export function SearchForm({ serviceId }: SearchFormProps) {
     ? 'Select city or town'
     : 'Choose a region first';
 
+  const canSearch = !!serviceId && !!region && !!city && !!datetime;
+
   const handleSearch = () => {
-    // No routing yet — just emit so we can verify wiring.
-    console.log('[Tiglemp Search]', {
-      serviceId,
-      regionId: region,
-      cityId: city,
-      datetime: datetime?.toISOString() ?? null,
-    });
+    if (!canSearch) return;
+    const params = new URLSearchParams();
+    params.set('serviceTypeId', String(serviceId));
+    params.set('regionId', String(region));
+    params.set('cityId', String(city));
+    if (datetime) params.set('at', datetime.toISOString());
+    navigate(`/search?${params.toString()}`);
   };
 
   return (
@@ -113,7 +117,8 @@ export function SearchForm({ serviceId }: SearchFormProps) {
       <button
         type="button"
         onClick={handleSearch}
-        className="md:ml-1 inline-flex items-center justify-center gap-2 h-full min-h-14 px-7 rounded-xl bg-primary text-primary-foreground font-semibold text-base hover:opacity-95 active:opacity-90 transition-opacity shadow-md shadow-primary/20"
+        disabled={!canSearch}
+        className="md:ml-1 inline-flex items-center justify-center gap-2 h-full min-h-14 px-7 rounded-xl bg-primary text-primary-foreground font-semibold text-base hover:opacity-95 active:opacity-90 transition-opacity shadow-md shadow-primary/20 disabled:opacity-60 disabled:cursor-not-allowed"
       >
         <Search className="size-5" />
         Search
