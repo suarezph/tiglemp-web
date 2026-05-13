@@ -1,10 +1,16 @@
-import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { ArrowRight, Check, CheckCircle2 } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { PARTNER_LOGIN_URL } from '@/lib/external-urls';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { ArrowRight } from 'lucide-react';
+import {
+  api,
+  ApiError,
+  collectFieldErrors,
+  generalApiErrorMessage,
+} from '@/lib/api';
+import type { ServiceType, RegisterPartnerResponse } from '@/types/api';
+import { PARTNER_LOGIN_URL, PARTNER_VERIFY_URL } from '@/lib/external-urls';
 import { Button } from '@/components/ui/button';
 import {
   Form,
@@ -16,7 +22,7 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import { SERVICES } from '@/lib/services-catalog';
+import { ServiceMultiSelect } from './ServiceMultiSelect';
 
 const registerSchema = z
   .object({
@@ -54,8 +60,6 @@ const registerSchema = z
 type RegisterValues = z.infer<typeof registerSchema>;
 
 export function PartnerRegisterForm() {
-  const [submitted, setSubmitted] = useState(false);
-
   const form = useForm<RegisterValues>({
     resolver: zodResolver(registerSchema),
     defaultValues: {
@@ -70,38 +74,58 @@ export function PartnerRegisterForm() {
     mode: 'onBlur',
   });
 
-  const onSubmit = form.handleSubmit((values) => {
-    console.log('[Tiglemp Partner Apply]', {
-      ...values,
-      password: '****',
-      confirmPassword: '****',
-    });
-    setSubmitted(true);
+  const serviceTypesQuery = useQuery({
+    queryKey: ['meta', 'service-types'],
+    queryFn: () => api.get<ServiceType[]>('/meta/service-types'),
+    staleTime: 5 * 60 * 1000,
   });
 
-  if (submitted) {
-    return (
-      <div className="rounded-2xl bg-primary/10 ring-1 ring-primary/30 p-8 md:p-10 text-center">
-        <div className="size-14 rounded-full bg-primary text-primary-foreground grid place-items-center mx-auto">
-          <CheckCircle2 className="size-7" />
-        </div>
-        <h3 className="mt-5 text-2xl font-bold">Application submitted</h3>
-        <p className="mt-2 text-base text-muted-foreground max-w-md mx-auto">
-          Thanks for applying to Tiglemp. We'll review your business and get
-          back to you within 1–2 business days.
-        </p>
-        <p className="mt-6 text-sm text-muted-foreground">
-          Already have a partner account?{' '}
-          <a
-            href={PARTNER_LOGIN_URL}
-            className="font-bold text-primary underline underline-offset-2"
-          >
-            Sign in
-          </a>
-        </p>
-      </div>
-    );
-  }
+  const mutation = useMutation({
+    mutationFn: (values: RegisterValues) =>
+      api.post<RegisterPartnerResponse>('/auth/register/partner', {
+        email: values.email,
+        password: values.password,
+        serviceTypeIds: values.serviceTypeIds,
+        businessName: values.businessName,
+        phone: values.phone,
+      }),
+    onSuccess: (_response, variables) => {
+      const params = new URLSearchParams();
+      params.set('email', variables.email);
+      window.location.href = `${PARTNER_VERIFY_URL}?${params.toString()}`;
+    },
+    onError: (error) => {
+      if (!(error instanceof ApiError)) return;
+      const fieldErrors = error.fieldErrors;
+      if (!fieldErrors) return;
+      const formFields: Array<keyof RegisterValues> = [
+        'businessName',
+        'phone',
+        'serviceTypeIds',
+        'email',
+        'password',
+        'confirmPassword',
+      ];
+      let firstField: keyof RegisterValues | null = null;
+      for (const name of formFields) {
+        const messages = collectFieldErrors(fieldErrors, name);
+        if (messages.length === 0) continue;
+        form.setError(name, { type: 'server', message: messages.join(' ') });
+        if (!firstField) firstField = name;
+      }
+      if (firstField) form.setFocus(firstField);
+    },
+  });
+
+  const onSubmit = form.handleSubmit((values) => mutation.mutate(values));
+
+  const generalError = generalApiErrorMessage(mutation.error);
+
+  const serviceOptions = (serviceTypesQuery.data?.data ?? []).map((s) => ({
+    id: s.id,
+    label: s.name,
+    description: s.description ?? null,
+  }));
 
   return (
     <div className="rounded-2xl bg-background ring-1 ring-border shadow-xl p-6 md:p-8 lg:p-10">
@@ -151,11 +175,15 @@ export function PartnerRegisterForm() {
               render={({ field }) => (
                 <FormItem className="mt-4">
                   <FormLabel>Services you offer</FormLabel>
-                  <FormDescription>Pick all that apply.</FormDescription>
+                  <FormDescription>
+                    Search and pick all the services your business offers.
+                  </FormDescription>
                   <FormControl>
-                    <ServicePills
+                    <ServiceMultiSelect
                       value={field.value}
                       onChange={field.onChange}
+                      options={serviceOptions}
+                      loading={serviceTypesQuery.isPending}
                     />
                   </FormControl>
                   <FormMessage />
@@ -271,6 +299,15 @@ export function PartnerRegisterForm() {
             )}
           />
 
+          {generalError && (
+            <div
+              role="alert"
+              className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
+            >
+              {generalError}
+            </div>
+          )}
+
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pt-2">
             <p className="text-sm text-muted-foreground">
               Already a partner?{' '}
@@ -283,10 +320,10 @@ export function PartnerRegisterForm() {
             </p>
             <Button
               type="submit"
-              disabled={form.formState.isSubmitting}
+              disabled={mutation.isPending || serviceTypesQuery.isPending}
               className="h-12 px-7 rounded-full text-base font-bold shadow-lg shadow-primary/20"
             >
-              Apply to be a partner
+              {mutation.isPending ? 'Submitting…' : 'Apply to be a partner'}
               <ArrowRight className="size-5" />
             </Button>
           </div>
@@ -316,39 +353,3 @@ function Section({
   );
 }
 
-function ServicePills({
-  value,
-  onChange,
-}: {
-  value: string[];
-  onChange: (next: string[]) => void;
-}) {
-  const toggle = (id: string) => {
-    onChange(value.includes(id) ? value.filter((v) => v !== id) : [...value, id]);
-  };
-
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      {SERVICES.map((s) => {
-        const selected = value.includes(s.id);
-        return (
-          <button
-            key={s.id}
-            type="button"
-            onClick={() => toggle(s.id)}
-            aria-pressed={selected}
-            className={cn(
-              'inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition-colors',
-              selected
-                ? 'bg-primary text-primary-foreground border-primary'
-                : 'bg-background hover:bg-foreground/[0.04] border-border'
-            )}
-          >
-            {selected && <Check className="size-3.5" />}
-            {s.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}

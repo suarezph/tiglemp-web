@@ -1,56 +1,48 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, ChevronDown, Search, X } from 'lucide-react';
-import type { ServiceType } from '@/types/api';
 import { cn } from '@/lib/utils';
+import { useOnClickOutside } from '@/hooks/use-on-click-outside';
 
-type ServiceTypePickerProps = {
-  options: ServiceType[];
-  value: string[];
-  onChange: (next: string[]) => void;
-  loading?: boolean;
-  disabled?: boolean;
-  placeholder?: string;
+export type ServiceOption = {
+  id: string;
+  label: string;
+  description?: string | null;
 };
 
-export function ServiceTypePicker({
-  options,
+type ServiceMultiSelectProps = {
+  value: string[];
+  onChange: (next: string[]) => void;
+  options: ServiceOption[];
+  placeholder?: string;
+  loading?: boolean;
+  emptyText?: string;
+};
+
+export function ServiceMultiSelect({
   value,
   onChange,
+  options,
+  placeholder = 'Select services you offer…',
   loading,
-  disabled,
-  placeholder = 'Select service types…',
-}: ServiceTypePickerProps) {
+  emptyText = 'No services available yet.',
+}: ServiceMultiSelectProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const wrapRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  useOnClickOutside(wrapRef, () => setOpen(false));
+
   useEffect(() => {
-    if (!open) {
+    if (open) {
+      setTimeout(() => inputRef.current?.focus(), 0);
+    } else {
       setQuery('');
-      return;
     }
-    const id = window.setTimeout(() => inputRef.current?.focus(), 0);
-    return () => window.clearTimeout(id);
   }, [open]);
 
-  useEffect(() => {
-    if (!open) return;
-    const listener = (event: MouseEvent | TouchEvent) => {
-      const el = wrapRef.current;
-      if (!el || el.contains(event.target as Node)) return;
-      setOpen(false);
-    };
-    document.addEventListener('mousedown', listener);
-    document.addEventListener('touchstart', listener);
-    return () => {
-      document.removeEventListener('mousedown', listener);
-      document.removeEventListener('touchstart', listener);
-    };
-  }, [open]);
-
-  const selected = useMemo(
-    () => options.filter((o) => value.includes(o.id)),
+  const selectedServices = useMemo(
+    () => options.filter((s) => value.includes(s.id)),
     [options, value]
   );
 
@@ -58,41 +50,22 @@ export function ServiceTypePicker({
     const q = query.trim().toLowerCase();
     if (!q) return options;
     return options.filter(
-      (o) =>
-        o.name.toLowerCase().includes(q) ||
-        o.code.toLowerCase().includes(q)
+      (s) =>
+        s.label.toLowerCase().includes(q) ||
+        (s.description ?? '').toLowerCase().includes(q)
     );
   }, [options, query]);
 
-  if (loading) {
-    return (
-      <p className="text-sm text-muted-foreground">Loading service types…</p>
-    );
-  }
-
-  if (options.length === 0) {
-    return (
-      <p className="text-sm text-muted-foreground">
-        No service types available.
-      </p>
-    );
-  }
-
   const toggle = (id: string) => {
-    if (disabled) return;
-    onChange(
-      value.includes(id) ? value.filter((v) => v !== id) : [...value, id]
-    );
+    onChange(value.includes(id) ? value.filter((v) => v !== id) : [...value, id]);
   };
 
   const removeOne = (id: string, e: React.MouseEvent) => {
-    if (disabled) return;
     e.stopPropagation();
     onChange(value.filter((v) => v !== id));
   };
 
   const clearAll = (e: React.MouseEvent) => {
-    if (disabled) return;
     e.stopPropagation();
     onChange([]);
   };
@@ -101,12 +74,12 @@ export function ServiceTypePicker({
     <div ref={wrapRef} className="relative">
       <button
         type="button"
-        onClick={() => !disabled && setOpen((o) => !o)}
-        disabled={disabled}
+        onClick={() => !loading && setOpen((o) => !o)}
+        disabled={loading}
         className={cn(
           'w-full text-left rounded-md border border-input bg-background px-3 py-2 text-sm transition-colors',
-          'hover:bg-accent/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-          'disabled:pointer-events-none disabled:opacity-50',
+          'hover:bg-foreground/[0.02] focus:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+          'disabled:opacity-60 disabled:cursor-not-allowed',
           open && 'ring-2 ring-ring'
         )}
         aria-haspopup="listbox"
@@ -114,22 +87,24 @@ export function ServiceTypePicker({
       >
         <div className="flex items-center gap-2 min-h-[24px]">
           <div className="flex-1 min-w-0">
-            {selected.length === 0 ? (
+            {loading ? (
+              <span className="text-muted-foreground">Loading services…</span>
+            ) : selectedServices.length === 0 ? (
               <span className="text-muted-foreground">{placeholder}</span>
             ) : (
               <div className="flex flex-wrap gap-1.5">
-                {selected.map((s) => (
+                {selectedServices.map((s) => (
                   <span
                     key={s.id}
                     className="inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary px-2 py-0.5 text-xs font-medium ring-1 ring-primary/20"
                   >
-                    {s.name}
+                    {s.label}
                     <span
                       role="button"
                       tabIndex={-1}
                       onClick={(e) => removeOne(s.id, e)}
                       className="grid place-items-center rounded-full hover:bg-primary/20 size-4 -mr-0.5"
-                      aria-label={`Remove ${s.name}`}
+                      aria-label={`Remove ${s.label}`}
                     >
                       <X className="size-3" />
                     </span>
@@ -138,7 +113,7 @@ export function ServiceTypePicker({
               </div>
             )}
           </div>
-          {selected.length > 0 && !disabled && (
+          {selectedServices.length > 0 && (
             <span
               role="button"
               tabIndex={-1}
@@ -160,7 +135,7 @@ export function ServiceTypePicker({
 
       {open && (
         <div
-          className="absolute left-0 right-0 top-[calc(100%+6px)] z-50 rounded-md border border-border bg-popover text-popover-foreground shadow-lg overflow-hidden"
+          className="absolute left-0 right-0 top-[calc(100%+6px)] z-50 rounded-xl border border-border bg-white shadow-2xl overflow-hidden"
           role="listbox"
         >
           <div className="p-2 border-b border-border">
@@ -171,27 +146,33 @@ export function ServiceTypePicker({
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search service types…"
-                className="w-full pl-9 pr-3 py-2 text-sm rounded-md bg-muted/50 outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground"
+                placeholder="Search services…"
+                className="w-full pl-9 pr-3 py-2 text-sm rounded-lg bg-foreground/[0.04] outline-none focus:ring-2 focus:ring-primary/40 placeholder:text-muted-foreground"
               />
             </div>
           </div>
           <ul className="max-h-72 overflow-y-auto py-1">
-            {filtered.length === 0 ? (
+            {options.length === 0 ? (
               <li className="px-4 py-6 text-center text-sm text-muted-foreground">
-                No service types match "{query}".
+                {emptyText}
+              </li>
+            ) : filtered.length === 0 ? (
+              <li className="px-4 py-6 text-center text-sm text-muted-foreground">
+                No services match "{query}".
               </li>
             ) : (
-              filtered.map((opt) => {
-                const isSelected = value.includes(opt.id);
+              filtered.map((s) => {
+                const isSelected = value.includes(s.id);
                 return (
-                  <li key={opt.id}>
+                  <li key={s.id}>
                     <button
                       type="button"
-                      onClick={() => toggle(opt.id)}
+                      onClick={() => toggle(s.id)}
                       className={cn(
                         'w-full text-left px-3 py-2 text-sm flex items-center gap-3 transition-colors',
-                        isSelected ? 'bg-accent' : 'hover:bg-accent/60'
+                        isSelected
+                          ? 'bg-primary/10'
+                          : 'hover:bg-foreground/[0.04]'
                       )}
                       aria-selected={isSelected}
                       role="option"
@@ -207,10 +188,14 @@ export function ServiceTypePicker({
                         {isSelected && <Check className="size-3" />}
                       </span>
                       <div className="min-w-0 flex-1">
-                        <div className="font-medium truncate">{opt.name}</div>
-                        <div className="text-xs text-muted-foreground truncate">
-                          {opt.code}
+                        <div className="font-medium text-foreground truncate">
+                          {s.label}
                         </div>
+                        {s.description && (
+                          <div className="text-xs text-muted-foreground truncate">
+                            {s.description}
+                          </div>
+                        )}
                       </div>
                     </button>
                   </li>

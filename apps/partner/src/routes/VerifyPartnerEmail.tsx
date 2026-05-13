@@ -9,6 +9,7 @@ import { AuthLayout } from '@/components/AuthLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { CUSTOMER_BE_A_PARTNER_URL } from '@/lib/external-urls';
 
 export function VerifyPartnerEmail() {
   const [searchParams] = useSearchParams();
@@ -187,9 +188,12 @@ export function VerifyPartnerEmail() {
 
         <p className="text-center text-sm text-muted-foreground">
           Wrong account?{' '}
-          <Link to="/register" className="underline underline-offset-4">
+          <a
+            href={CUSTOMER_BE_A_PARTNER_URL}
+            className="underline underline-offset-4"
+          >
             Start over
-          </Link>
+          </a>
         </p>
       </div>
     </AuthLayout>

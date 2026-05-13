@@ -12,18 +12,35 @@ export const emptyAddress: Address = {
   country: '',
 };
 
+export type AddressFieldErrors = Partial<Record<keyof Address, string[]>>;
+
 type AddressFieldsProps = {
   value: Address;
   onChange: (next: Address) => void;
   idPrefix: string;
   required?: boolean;
+  errors?: AddressFieldErrors;
 };
+
+function FieldError({ messages }: { messages?: string[] }) {
+  if (!messages?.length) return null;
+  return (
+    <div className="grid gap-0.5">
+      {messages.map((m) => (
+        <p key={m} className="text-xs text-destructive">
+          {m}
+        </p>
+      ))}
+    </div>
+  );
+}
 
 export function AddressFields({
   value,
   onChange,
   idPrefix,
   required,
+  errors,
 }: AddressFieldsProps) {
   const update = <K extends keyof Address>(key: K, v: Address[K]) =>
     onChange({ ...value, [key]: v });
@@ -41,6 +58,7 @@ export function AddressFields({
           value={value.label}
           onChange={(e) => update('label', e.target.value)}
         />
+        <FieldError messages={errors?.label} />
       </div>
       <div className="grid gap-2 col-span-2">
         <Label htmlFor={`${idPrefix}-line1`}>Address line 1</Label>
@@ -52,6 +70,7 @@ export function AddressFields({
           value={value.line1}
           onChange={(e) => update('line1', e.target.value)}
         />
+        <FieldError messages={errors?.line1} />
       </div>
       <div className="grid gap-2 col-span-2">
         <Label htmlFor={`${idPrefix}-line2`}>Address line 2</Label>
@@ -61,6 +80,7 @@ export function AddressFields({
           value={value.line2 ?? ''}
           onChange={(e) => update('line2', e.target.value)}
         />
+        <FieldError messages={errors?.line2} />
       </div>
       <div className="grid gap-2">
         <Label htmlFor={`${idPrefix}-city`}>City</Label>
@@ -72,6 +92,7 @@ export function AddressFields({
           value={value.city}
           onChange={(e) => update('city', e.target.value)}
         />
+        <FieldError messages={errors?.city} />
       </div>
       <div className="grid gap-2">
         <Label htmlFor={`${idPrefix}-state`}>State</Label>
@@ -83,6 +104,7 @@ export function AddressFields({
           value={value.state}
           onChange={(e) => update('state', e.target.value)}
         />
+        <FieldError messages={errors?.state} />
       </div>
       <div className="grid gap-2">
         <Label htmlFor={`${idPrefix}-postal`}>Postal code</Label>
@@ -94,6 +116,7 @@ export function AddressFields({
           value={value.postalCode}
           onChange={(e) => update('postalCode', e.target.value)}
         />
+        <FieldError messages={errors?.postalCode} />
       </div>
       <div className="grid gap-2">
         <Label htmlFor={`${idPrefix}-country`}>Country</Label>
@@ -105,6 +128,7 @@ export function AddressFields({
           value={value.country}
           onChange={(e) => update('country', e.target.value)}
         />
+        <FieldError messages={errors?.country} />
       </div>
     </div>
   );

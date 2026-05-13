@@ -1,6 +1,10 @@
 import { Plus, Star, Trash2 } from 'lucide-react';
 import type { PartnerShopLocationInput } from '@/types/api';
-import { AddressFields, emptyAddress } from '@/components/AddressFields';
+import {
+  AddressFields,
+  emptyAddress,
+  type AddressFieldErrors,
+} from '@/components/AddressFields';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,12 +20,55 @@ const emptyLocation = (): PartnerShopLocationInput => ({
   isDefault: false,
 });
 
+/**
+ * Errors keyed by `<index>.<field>` (e.g. "0.label", "1.contactPhone").
+ * The parent should slice from `ApiError.fieldErrors` by stripping the
+ * `shopLocations.` prefix before passing in.
+ */
+export type ShopLocationFieldErrors = Record<string, string[] | undefined>;
+
 type ShopLocationsFieldProps = {
   value: PartnerShopLocationInput[];
   onChange: (next: PartnerShopLocationInput[]) => void;
+  errors?: ShopLocationFieldErrors | null;
 };
 
-export function ShopLocationsField({ value, onChange }: ShopLocationsFieldProps) {
+function extractRowErrors(
+  errors: ShopLocationFieldErrors | null | undefined,
+  idx: number
+): { address: AddressFieldErrors; contactPhone?: string[]; notes?: string[] } {
+  if (!errors) return { address: {} };
+  const prefix = `${idx}.`;
+  const address: AddressFieldErrors = {};
+  let contactPhone: string[] | undefined;
+  let notes: string[] | undefined;
+  for (const [key, msgs] of Object.entries(errors)) {
+    if (!msgs?.length || !key.startsWith(prefix)) continue;
+    const fieldName = key.slice(prefix.length);
+    if (fieldName === 'contactPhone') {
+      contactPhone = msgs;
+    } else if (fieldName === 'notes') {
+      notes = msgs;
+    } else if (
+      fieldName === 'label' ||
+      fieldName === 'line1' ||
+      fieldName === 'line2' ||
+      fieldName === 'city' ||
+      fieldName === 'state' ||
+      fieldName === 'postalCode' ||
+      fieldName === 'country'
+    ) {
+      address[fieldName] = msgs;
+    }
+  }
+  return { address, contactPhone, notes };
+}
+
+export function ShopLocationsField({
+  value,
+  onChange,
+  errors,
+}: ShopLocationsFieldProps) {
   const add = () => {
     if (value.length >= MAX_LOCATIONS) return;
     const isFirst = value.length === 0;
@@ -77,7 +124,9 @@ export function ShopLocationsField({ value, onChange }: ShopLocationsFieldProps)
       )}
 
       <div className="space-y-4">
-        {value.map((loc, idx) => (
+        {value.map((loc, idx) => {
+          const rowErrors = extractRowErrors(errors, idx);
+          return (
           <div
             key={idx}
             className="rounded-lg border p-4 space-y-4 bg-muted/30"
@@ -121,6 +170,7 @@ export function ShopLocationsField({ value, onChange }: ShopLocationsFieldProps)
               onChange={(addr) => update(idx, addr)}
               idPrefix={`loc-${idx}`}
               required
+              errors={rowErrors.address}
             />
 
             <div className="grid grid-cols-2 gap-3">
@@ -135,6 +185,11 @@ export function ShopLocationsField({ value, onChange }: ShopLocationsFieldProps)
                     update(idx, { contactPhone: e.target.value })
                   }
                 />
+                {rowErrors.contactPhone?.map((m) => (
+                  <p key={m} className="text-xs text-destructive">
+                    {m}
+                  </p>
+                ))}
               </div>
               <div className="grid gap-2">
                 <Label htmlFor={`loc-${idx}-notes`}>Notes</Label>
@@ -145,10 +200,16 @@ export function ShopLocationsField({ value, onChange }: ShopLocationsFieldProps)
                   value={loc.notes ?? ''}
                   onChange={(e) => update(idx, { notes: e.target.value })}
                 />
+                {rowErrors.notes?.map((m) => (
+                  <p key={m} className="text-xs text-destructive">
+                    {m}
+                  </p>
+                ))}
               </div>
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

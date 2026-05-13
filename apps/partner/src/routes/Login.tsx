@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import { api, ApiError, generalApiErrorMessage } from '@/lib/api';
 import { setVerifyContext } from '@/lib/verify-context';
@@ -9,6 +9,7 @@ import { AuthLayout } from '@/components/AuthLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { CUSTOMER_BE_A_PARTNER_URL } from '@/lib/external-urls';
 
 export function Login() {
   const navigate = useNavigate();
@@ -126,9 +127,12 @@ export function Login() {
         </form>
         <p className="text-center text-sm text-muted-foreground">
           Don&apos;t have an account?{' '}
-          <Link to="/register" className="underline underline-offset-4">
-            Sign up
-          </Link>
+          <a
+            href={CUSTOMER_BE_A_PARTNER_URL}
+            className="underline underline-offset-4"
+          >
+            Apply to be a partner
+          </a>
         </p>
       </div>
     </AuthLayout>

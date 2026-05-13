@@ -119,6 +119,30 @@ export type ServiceType = {
   updatedAt: string;
 };
 
+export type CoverageRegion = {
+  id: number;
+  code: string;
+  name: string;
+};
+
+export type CoverageCity = {
+  id: number;
+  coverageRegionId: number;
+  name: string;
+};
+
+export type PartnerServiceCoverageArea = {
+  id: string;
+  partnerId: string;
+  serviceTypeId: string;
+  coverageRegionId: number;
+  coverageCityId: number;
+  isActive: boolean;
+  serviceType?: ServiceType;
+  coverageRegion?: CoverageRegion & { isActive?: boolean };
+  coverageCity?: CoverageCity & { isActive?: boolean };
+};
+
 export type PartnerServiceType = {
   partnerId: string;
   serviceTypeId: string;
@@ -194,6 +218,7 @@ export type Partner = {
   createdAt: string;
   users: PartnerUser[];
   serviceTypes: PartnerServiceType[];
+  serviceCoverageAreas?: PartnerServiceCoverageArea[];
   documents: PartnerDocument[];
   shopLocations: PartnerShopLocation[];
   approvalLogs?: ApprovalLog[];

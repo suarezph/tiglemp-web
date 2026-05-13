@@ -1,18 +1,25 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Ban,
   CheckCircle2,
   ExternalLink,
   FileText,
-  MapPin,
   MoreHorizontal,
   Plus,
   ShieldCheck,
   Star,
   XCircle,
 } from 'lucide-react';
-import { api, ApiError } from '@/lib/api';
+import {
+  api,
+  ApiError,
+  collectFieldErrors,
+  generalApiErrorMessage,
+} from '@/lib/api';
 import type {
   ApprovalAction,
   ApprovalLog,
@@ -40,6 +47,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -53,6 +69,7 @@ import {
 import { ShopLocationsField } from '@/components/ShopLocationsField';
 import { DocumentsUploader } from '@/components/DocumentsUploader';
 import { ServiceTypePicker } from '@/components/ServiceTypePicker';
+import { CoverageAreaPicker } from '@/components/CoverageAreaPicker';
 
 const PARTNERS_KEY = ['admin', 'partners'] as const;
 const SERVICE_TYPES_KEY = ['meta', 'service-types'] as const;
@@ -125,8 +142,8 @@ export function Partners() {
               <TableHead>Business</TableHead>
               <TableHead>Email</TableHead>
               <TableHead>Phone</TableHead>
-              <TableHead>Locations</TableHead>
-              <TableHead>Docs</TableHead>
+              <TableHead>Services</TableHead>
+              <TableHead>Coverage</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="w-[1%]"></TableHead>
             </TableRow>
@@ -154,9 +171,6 @@ export function Partners() {
               </TableRow>
             )}
             {partners.map((partner) => {
-              const defaultLocation =
-                partner.shopLocations.find((l) => l.isDefault) ??
-                partner.shopLocations[0];
               return (
                 <TableRow key={partner.id}>
                   <TableCell className="font-medium">
@@ -169,29 +183,10 @@ export function Partners() {
                   </TableCell>
                   <TableCell>{partner.phone}</TableCell>
                   <TableCell>
-                    {partner.shopLocations.length === 0 ? (
-                      <span className="text-muted-foreground">—</span>
-                    ) : (
-                      <span className="flex items-center gap-1.5 text-sm">
-                        <MapPin className="size-3.5 text-muted-foreground" />
-                        {partner.shopLocations.length}
-                        {defaultLocation && (
-                          <span className="text-muted-foreground">
-                            · {defaultLocation.city}
-                          </span>
-                        )}
-                      </span>
-                    )}
+                    <ServicesCell partner={partner} />
                   </TableCell>
                   <TableCell>
-                    {partner.documents.length === 0 ? (
-                      <span className="text-muted-foreground">—</span>
-                    ) : (
-                      <span className="flex items-center gap-1.5 text-sm">
-                        <FileText className="size-3.5 text-muted-foreground" />
-                        {partner.documents.length}
-                      </span>
-                    )}
+                    <CoverageCell partner={partner} />
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-wrap items-center gap-1.5">
@@ -285,64 +280,160 @@ type CreatePartnerDialogProps = {
   onOpenChange: (open: boolean) => void;
 };
 
+const createPartnerSchema = z.object({
+  businessName: z
+    .string()
+    .min(2, 'Business name must be at least 2 characters')
+    .max(120, 'Business name is too long'),
+  phone: z
+    .string()
+    .min(7, 'Phone must be at least 7 characters')
+    .max(30, 'Phone is too long'),
+  serviceTypeIds: z
+    .array(z.string())
+    .min(1, 'Pick at least one service type')
+    .max(20, 'Too many service types selected'),
+  coverageRegionIds: z
+    .array(z.number())
+    .max(1, 'Pick only one region'),
+  coverageCityIds: z.array(z.number()),
+  email: z.string().email('Enter a valid email address'),
+  password: z
+    .string()
+    .min(8, 'Password must be at least 8 characters')
+    .max(72, 'Password is too long')
+    .regex(/[A-Z]/, 'Must include at least one uppercase letter')
+    .regex(/[a-z]/, 'Must include at least one lowercase letter')
+    .regex(/[0-9]/, 'Must include at least one number')
+    .regex(/[^A-Za-z0-9]/, 'Must include at least one special character'),
+});
+
+type CreatePartnerFormValues = z.infer<typeof createPartnerSchema>;
+
+const CREATE_PARTNER_DEFAULTS: CreatePartnerFormValues = {
+  businessName: '',
+  phone: '',
+  serviceTypeIds: [],
+  coverageRegionIds: [],
+  coverageCityIds: [],
+  email: '',
+  password: '',
+};
+
 function CreatePartnerDialog({ open, onOpenChange }: CreatePartnerDialogProps) {
   const queryClient = useQueryClient();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [businessName, setBusinessName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [serviceTypeIds, setServiceTypeIds] = useState<string[]>([]);
   const [shopLocations, setShopLocations] = useState<
     PartnerShopLocationInput[]
   >([]);
   const [stagedFiles, setStagedFiles] = useState<File[]>([]);
 
+  const form = useForm<CreatePartnerFormValues>({
+    resolver: zodResolver(createPartnerSchema),
+    defaultValues: CREATE_PARTNER_DEFAULTS,
+    mode: 'onBlur',
+  });
+
   const serviceTypesQuery = useServiceTypes(open);
 
-  const reset = () => {
-    setEmail('');
-    setPassword('');
-    setBusinessName('');
-    setPhone('');
-    setServiceTypeIds([]);
+  const resetExtras = () => {
     setShopLocations([]);
     setStagedFiles([]);
   };
 
   const mutation = useMutation({
-    mutationFn: () =>
-      api.post('/admin/partners', {
-        email,
-        password,
-        businessName,
-        phone,
-        serviceTypeIds,
+    mutationFn: (values: CreatePartnerFormValues) => {
+      const regionId = values.coverageRegionIds[0];
+      const serviceCoverageAreas =
+        regionId === undefined
+          ? []
+          : values.serviceTypeIds.map((serviceTypeId) => ({
+              serviceTypeId,
+              coverageRegionId: regionId,
+              coverageCityIds: values.coverageCityIds,
+            }));
+
+      return api.post('/admin/partners', {
+        email: values.email,
+        password: values.password,
+        businessName: values.businessName,
+        phone: values.phone,
+        serviceTypeIds: values.serviceTypeIds,
+        partnerUserLimit: 5,
+        approvalStatus: 'APPROVED',
+        serviceCoverageAreas,
         shopLocations: sanitizeLocations(shopLocations),
         // TODO: supportingDocuments — staged files are captured but not sent
         // until the upload-to-storage flow is finalized server-side.
-      }),
+      });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: PARTNERS_KEY });
-      reset();
+      form.reset(CREATE_PARTNER_DEFAULTS);
+      resetExtras();
       onOpenChange(false);
     },
+    onError: (error) => {
+      if (!(error instanceof ApiError)) return;
+      const fieldErrors = error.fieldErrors;
+      if (!fieldErrors) return;
+      const formFields: Array<keyof CreatePartnerFormValues> = [
+        'businessName',
+        'phone',
+        'serviceTypeIds',
+        'coverageRegionIds',
+        'coverageCityIds',
+        'email',
+        'password',
+      ];
+      let firstField: keyof CreatePartnerFormValues | null = null;
+      for (const name of formFields) {
+        const messages = collectFieldErrors(fieldErrors, name);
+        if (messages.length === 0) continue;
+        form.setError(name, { type: 'server', message: messages.join(' ') });
+        if (!firstField) firstField = name;
+      }
+      // Coverage validation comes back keyed on serviceCoverageAreas — route
+      // it onto the cities field since that's the more common mismatch.
+      const coverageMsgs = collectFieldErrors(
+        fieldErrors,
+        'serviceCoverageAreas'
+      );
+      if (coverageMsgs.length > 0) {
+        form.setError('coverageCityIds', {
+          type: 'server',
+          message: coverageMsgs.join(' '),
+        });
+        if (!firstField) firstField = 'coverageCityIds';
+      }
+      if (firstField) form.setFocus(firstField);
+    },
   });
-
-  const handleSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    mutation.mutate();
-  };
 
   const handleOpenChange = (next: boolean) => {
     if (!next) {
       mutation.reset();
-      reset();
+      form.reset(CREATE_PARTNER_DEFAULTS);
+      resetExtras();
     }
     onOpenChange(next);
   };
 
-  const errorMessage =
-    mutation.error instanceof ApiError ? mutation.error.message : null;
+  const onSubmit = form.handleSubmit((values) => mutation.mutate(values));
+
+  const apiFieldErrors =
+    mutation.error instanceof ApiError ? mutation.error.fieldErrors : null;
+  const shopLocationErrors = (() => {
+    if (!apiFieldErrors) return null;
+    const sliced: Record<string, string[] | undefined> = {};
+    const prefix = 'shopLocations.';
+    for (const [key, msgs] of Object.entries(apiFieldErrors)) {
+      if (!msgs?.length) continue;
+      if (key.startsWith(prefix)) sliced[key.slice(prefix.length)] = msgs;
+    }
+    return Object.keys(sliced).length > 0 ? sliced : null;
+  })();
+
+  const generalError = generalApiErrorMessage(mutation.error);
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -353,103 +444,195 @@ function CreatePartnerDialog({ open, onOpenChange }: CreatePartnerDialogProps) {
             Creates an approved partner account immediately.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="grid gap-5">
-          <div className="grid gap-2">
-            <Label htmlFor="businessName">Business name</Label>
-            <Input
-              id="businessName"
-              required
-              minLength={2}
-              maxLength={120}
-              value={businessName}
-              onChange={(e) => setBusinessName(e.target.value)}
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="phone">Phone</Label>
-            <Input
-              id="phone"
-              required
-              minLength={7}
-              maxLength={30}
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label>Service types</Label>
-            <p className="text-xs text-muted-foreground">
-              Pick all that apply (at least one).
-            </p>
-            <ServiceTypePicker
-              options={serviceTypesQuery.data?.data ?? []}
-              value={serviceTypeIds}
-              onChange={setServiceTypeIds}
-              loading={serviceTypesQuery.isPending}
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="newEmail">Email</Label>
-            <Input
-              id="newEmail"
-              type="email"
-              required
-              autoComplete="off"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="newPassword">Password</Label>
-            <Input
-              id="newPassword"
-              type="password"
-              required
-              minLength={8}
-              autoComplete="new-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-            <p className="text-xs text-muted-foreground">
-              Must include uppercase, lowercase, number, and a special character.
-            </p>
-          </div>
-
-          <div className="border-t pt-4">
-            <ShopLocationsField
-              value={shopLocations}
-              onChange={setShopLocations}
-            />
-          </div>
-
-          <div className="border-t pt-4">
-            <DocumentsUploader
-              staged={stagedFiles}
-              onStagedChange={setStagedFiles}
-            />
-          </div>
-
-          {errorMessage && (
-            <p className="text-sm text-destructive" role="alert">
-              {errorMessage}
-            </p>
-          )}
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => handleOpenChange(false)}
+        <Form {...form}>
+          <form onSubmit={onSubmit} noValidate className="grid gap-6">
+            <FormSection
+              title="Business information"
+              subtitle="Public details we share with customers."
             >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              disabled={mutation.isPending || serviceTypeIds.length === 0}
+              <div className="grid gap-4 sm:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="businessName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Business name</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="e.g. Bright Shine Carwash"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="phone"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Phone</FormLabel>
+                      <FormControl>
+                        <Input placeholder="+639171234567" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <FormField
+                control={form.control}
+                name="serviceTypeIds"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Services you offer</FormLabel>
+                    <FormDescription>
+                      Pick all that apply (at least one).
+                    </FormDescription>
+                    <FormControl>
+                      <div>
+                        <ServiceTypePicker
+                          options={serviceTypesQuery.data?.data ?? []}
+                          value={field.value}
+                          onChange={field.onChange}
+                          loading={serviceTypesQuery.isPending}
+                        />
+                      </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </FormSection>
+
+            <FormSection
+              title="Account information"
+              subtitle="Credentials the partner will use to sign in."
             >
-              {mutation.isPending ? 'Creating…' : 'Create partner'}
-            </Button>
-          </DialogFooter>
-        </form>
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="email"
+                        autoComplete="off"
+                        placeholder="partner@example.com"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="password"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Password</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="password"
+                        autoComplete="new-password"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Must include uppercase, lowercase, number, and a special
+                      character.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </FormSection>
+
+            <FormSection
+              title="Service coverage area"
+              subtitle="Where this partner accepts bookings."
+            >
+              <FormField
+                control={form.control}
+                name="coverageCityIds"
+                render={() => (
+                  <FormItem>
+                    <FormControl>
+                      <div>
+                        <CoverageAreaPicker
+                          regionIds={form.watch('coverageRegionIds')}
+                          cityIds={form.watch('coverageCityIds')}
+                          onRegionsChange={(next) => {
+                            form.setValue('coverageRegionIds', next, {
+                              shouldValidate: true,
+                              shouldDirty: true,
+                            });
+                            form.clearErrors('coverageRegionIds');
+                            form.clearErrors('coverageCityIds');
+                          }}
+                          onCitiesChange={(next) => {
+                            form.setValue('coverageCityIds', next, {
+                              shouldValidate: true,
+                              shouldDirty: true,
+                            });
+                            form.clearErrors('coverageCityIds');
+                          }}
+                        />
+                      </div>
+                    </FormControl>
+                    {form.formState.errors.coverageRegionIds?.message && (
+                      <p className="text-sm text-destructive">
+                        {form.formState.errors.coverageRegionIds.message}
+                      </p>
+                    )}
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </FormSection>
+
+            <FormSection
+              title="Address & supporting documents"
+              subtitle="Optional — add shop locations and verification files."
+            >
+              <ShopLocationsField
+                value={shopLocations}
+                onChange={setShopLocations}
+                errors={shopLocationErrors}
+              />
+              <DocumentsUploader
+                staged={stagedFiles}
+                onStagedChange={setStagedFiles}
+              />
+            </FormSection>
+
+            {generalError && (
+              <div
+                role="alert"
+                className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
+              >
+                {generalError}
+              </div>
+            )}
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => handleOpenChange(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={mutation.isPending}>
+                {mutation.isPending ? 'Creating…' : 'Create partner'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
       </DialogContent>
     </Dialog>
   );
@@ -460,27 +643,68 @@ type EditPartnerDialogProps = {
   onClose: () => void;
 };
 
+const editPartnerSchema = z.object({
+  businessName: z
+    .string()
+    .min(2, 'Business name must be at least 2 characters')
+    .max(120, 'Business name is too long'),
+  phone: z
+    .string()
+    .min(7, 'Phone must be at least 7 characters')
+    .max(30, 'Phone is too long'),
+  serviceTypeIds: z
+    .array(z.string())
+    .min(1, 'Pick at least one service type')
+    .max(20, 'Too many service types selected'),
+  coverageRegionIds: z.array(z.number()).max(1, 'Pick only one region'),
+  coverageCityIds: z.array(z.number()),
+  partnerUserLimit: z
+    .number()
+    .int()
+    .min(1, 'Must allow at least 1 seat')
+    .max(50, 'Too many seats'),
+  isActive: z.boolean(),
+});
+
+type EditPartnerFormValues = z.infer<typeof editPartnerSchema>;
+
 function EditPartnerDialog({ partner, onClose }: EditPartnerDialogProps) {
   const queryClient = useQueryClient();
-  const [businessName, setBusinessName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [serviceTypeIds, setServiceTypeIds] = useState<string[]>([]);
-  const [isActive, setIsActive] = useState(true);
-  const [partnerUserLimit, setPartnerUserLimit] = useState<number>(1);
   const [shopLocations, setShopLocations] = useState<
     PartnerShopLocationInput[]
   >([]);
   const [stagedFiles, setStagedFiles] = useState<File[]>([]);
 
+  const form = useForm<EditPartnerFormValues>({
+    resolver: zodResolver(editPartnerSchema),
+    defaultValues: {
+      businessName: '',
+      phone: '',
+      serviceTypeIds: [],
+      coverageRegionIds: [],
+      coverageCityIds: [],
+      partnerUserLimit: 1,
+      isActive: true,
+    },
+    mode: 'onBlur',
+  });
+
   const serviceTypesQuery = useServiceTypes(partner !== null);
 
   useEffect(() => {
     if (!partner) return;
-    setBusinessName(partner.businessName);
-    setPhone(partner.phone);
-    setServiceTypeIds(partner.serviceTypes.map((pbt) => pbt.serviceTypeId));
-    setIsActive(rootUserOf(partner)?.isActive ?? true);
-    setPartnerUserLimit(partner.partnerUserLimit);
+    const areas = partner.serviceCoverageAreas ?? [];
+    const regionIds = areas.length > 0 ? [areas[0].coverageRegionId] : [];
+    const cityIds = [...new Set(areas.map((a) => a.coverageCityId))];
+    form.reset({
+      businessName: partner.businessName,
+      phone: partner.phone,
+      serviceTypeIds: partner.serviceTypes.map((pbt) => pbt.serviceTypeId),
+      coverageRegionIds: regionIds,
+      coverageCityIds: cityIds,
+      partnerUserLimit: partner.partnerUserLimit,
+      isActive: rootUserOf(partner)?.isActive ?? true,
+    });
     setShopLocations(
       partner.shopLocations.map((loc) => ({
         label: loc.label,
@@ -498,23 +722,68 @@ function EditPartnerDialog({ partner, onClose }: EditPartnerDialogProps) {
       }))
     );
     setStagedFiles([]);
-  }, [partner]);
+  }, [partner, form]);
 
   const mutation = useMutation({
-    mutationFn: () =>
-      api.put(`/admin/partners/${partner!.id}`, {
-        businessName,
-        phone,
-        serviceTypeIds,
-        isActive,
-        partnerUserLimit,
+    mutationFn: (values: EditPartnerFormValues) => {
+      const regionId = values.coverageRegionIds[0];
+      const serviceCoverageAreas =
+        regionId === undefined
+          ? []
+          : values.serviceTypeIds.map((serviceTypeId) => ({
+              serviceTypeId,
+              coverageRegionId: regionId,
+              coverageCityIds: values.coverageCityIds,
+            }));
+
+      return api.put(`/admin/partners/${partner!.id}`, {
+        businessName: values.businessName,
+        phone: values.phone,
+        serviceTypeIds: values.serviceTypeIds,
+        partnerUserLimit: values.partnerUserLimit,
+        isActive: values.isActive,
+        serviceCoverageAreas,
         shopLocations: sanitizeLocations(shopLocations),
-        // TODO: supportingDocuments — frontend captures staged files for
-        // future upload, but we don't include them in the PUT payload yet.
-      }),
+        // TODO: supportingDocuments — staged files are captured but not sent
+        // until the upload-to-storage flow is finalized server-side.
+      });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: PARTNERS_KEY });
       onClose();
+    },
+    onError: (error) => {
+      if (!(error instanceof ApiError)) return;
+      const fieldErrors = error.fieldErrors;
+      if (!fieldErrors) return;
+      const formFields: Array<keyof EditPartnerFormValues> = [
+        'businessName',
+        'phone',
+        'serviceTypeIds',
+        'coverageRegionIds',
+        'coverageCityIds',
+        'partnerUserLimit',
+        'isActive',
+      ];
+      let firstField: keyof EditPartnerFormValues | null = null;
+      for (const name of formFields) {
+        const messages = collectFieldErrors(fieldErrors, name);
+        if (messages.length === 0) continue;
+        form.setError(name, { type: 'server', message: messages.join(' ') });
+        if (!firstField) firstField = name;
+      }
+      const coverageMsgs = collectFieldErrors(
+        fieldErrors,
+        'serviceCoverageAreas'
+      );
+      if (coverageMsgs.length > 0) {
+        form.setError('coverageCityIds', {
+          type: 'server',
+          message: coverageMsgs.join(' '),
+        });
+        if (!firstField) firstField = 'coverageCityIds';
+      }
+      if (firstField) form.setFocus(firstField);
     },
   });
 
@@ -524,13 +793,23 @@ function EditPartnerDialog({ partner, onClose }: EditPartnerDialogProps) {
     onClose();
   };
 
-  const handleSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    mutation.mutate();
-  };
+  const onSubmit = form.handleSubmit((values) => mutation.mutate(values));
 
-  const errorMessage =
-    mutation.error instanceof ApiError ? mutation.error.message : null;
+  const apiFieldErrors =
+    mutation.error instanceof ApiError ? mutation.error.fieldErrors : null;
+  const shopLocationErrors = (() => {
+    if (!apiFieldErrors) return null;
+    const sliced: Record<string, string[] | undefined> = {};
+    const prefix = 'shopLocations.';
+    for (const [key, msgs] of Object.entries(apiFieldErrors)) {
+      if (!msgs?.length) continue;
+      if (key.startsWith(prefix)) sliced[key.slice(prefix.length)] = msgs;
+    }
+    return Object.keys(sliced).length > 0 ? sliced : null;
+  })();
+
+  const generalError = generalApiErrorMessage(mutation.error);
+  const usersInUse = partner?.users?.length ?? 0;
 
   return (
     <Dialog open={partner !== null} onOpenChange={(o) => !o && handleClose()}>
@@ -538,105 +817,213 @@ function EditPartnerDialog({ partner, onClose }: EditPartnerDialogProps) {
         <DialogHeader>
           <DialogTitle>Edit Partner</DialogTitle>
           <DialogDescription>
-            Update business info, locations, and documents. Email and password
-            cannot be changed here.
+            Update business info, coverage, locations, and documents. Email and
+            password cannot be changed here.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="grid gap-5">
-          <div className="grid gap-2">
-            <Label htmlFor="editBusinessName">Business name</Label>
-            <Input
-              id="editBusinessName"
-              required
-              minLength={2}
-              maxLength={120}
-              value={businessName}
-              onChange={(e) => setBusinessName(e.target.value)}
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="editPhone">Phone</Label>
-            <Input
-              id="editPhone"
-              required
-              minLength={7}
-              maxLength={30}
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="editPartnerUserLimit">Team seats</Label>
-            <Input
-              id="editPartnerUserLimit"
-              type="number"
-              required
-              min={1}
-              max={50}
-              value={partnerUserLimit}
-              onChange={(e) =>
-                setPartnerUserLimit(Number(e.target.value) || 1)
-              }
-            />
-            <p className="text-xs text-muted-foreground">
-              Total partner user accounts allowed (root partner counts toward
-              this limit). Currently {partner?.users?.length ?? 0} in use.
-            </p>
-          </div>
-          <div className="grid gap-2">
-            <Label>Service types</Label>
-            <p className="text-xs text-muted-foreground">
-              Pick all that apply (at least one).
-            </p>
-            <ServiceTypePicker
-              options={serviceTypesQuery.data?.data ?? []}
-              value={serviceTypeIds}
-              onChange={setServiceTypeIds}
-              loading={serviceTypesQuery.isPending}
-            />
-          </div>
-
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={isActive}
-              onChange={(e) => setIsActive(e.target.checked)}
-            />
-            Account active
-          </label>
-
-          <div className="border-t pt-4">
-            <ShopLocationsField
-              value={shopLocations}
-              onChange={setShopLocations}
-            />
-          </div>
-
-          <div className="border-t pt-4">
-            <DocumentsUploader
-              existing={partner?.documents}
-              staged={stagedFiles}
-              onStagedChange={setStagedFiles}
-            />
-          </div>
-
-          {errorMessage && (
-            <p className="text-sm text-destructive" role="alert">
-              {errorMessage}
-            </p>
-          )}
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={handleClose}>
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              disabled={mutation.isPending || serviceTypeIds.length === 0}
+        <Form {...form}>
+          <form onSubmit={onSubmit} noValidate className="grid gap-6">
+            <FormSection
+              title="Business information"
+              subtitle="Public details we share with customers."
             >
-              {mutation.isPending ? 'Saving…' : 'Save changes'}
-            </Button>
-          </DialogFooter>
-        </form>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="businessName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Business name</FormLabel>
+                      <FormControl>
+                        <Input {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="phone"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Phone</FormLabel>
+                      <FormControl>
+                        <Input {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <FormField
+                control={form.control}
+                name="serviceTypeIds"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Services you offer</FormLabel>
+                    <FormDescription>
+                      Pick all that apply (at least one).
+                    </FormDescription>
+                    <FormControl>
+                      <div>
+                        <ServiceTypePicker
+                          options={serviceTypesQuery.data?.data ?? []}
+                          value={field.value}
+                          onChange={field.onChange}
+                          loading={serviceTypesQuery.isPending}
+                        />
+                      </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </FormSection>
+
+            <FormSection
+              title="Account information"
+              subtitle="Email is fixed; manage seat allocation here."
+            >
+              <DetailField label="Email">
+                <p className="text-sm">
+                  {(partner ? rootUserOf(partner)?.email : null) ?? (
+                    <span className="text-muted-foreground">—</span>
+                  )}
+                </p>
+              </DetailField>
+
+              <FormField
+                control={form.control}
+                name="partnerUserLimit"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Team seats</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={50}
+                        value={field.value}
+                        onChange={(e) =>
+                          field.onChange(Number(e.target.value) || 1)
+                        }
+                        onBlur={field.onBlur}
+                        name={field.name}
+                        ref={field.ref}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Total partner accounts allowed (root counts toward this
+                      limit). Currently {usersInUse} in use.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </FormSection>
+
+            <FormSection
+              title="Service coverage area"
+              subtitle="Where this partner accepts bookings."
+            >
+              <FormField
+                control={form.control}
+                name="coverageCityIds"
+                render={() => (
+                  <FormItem>
+                    <FormControl>
+                      <div>
+                        <CoverageAreaPicker
+                          regionIds={form.watch('coverageRegionIds')}
+                          cityIds={form.watch('coverageCityIds')}
+                          onRegionsChange={(next) => {
+                            form.setValue('coverageRegionIds', next, {
+                              shouldValidate: true,
+                              shouldDirty: true,
+                            });
+                            form.clearErrors('coverageRegionIds');
+                            form.clearErrors('coverageCityIds');
+                          }}
+                          onCitiesChange={(next) => {
+                            form.setValue('coverageCityIds', next, {
+                              shouldValidate: true,
+                              shouldDirty: true,
+                            });
+                            form.clearErrors('coverageCityIds');
+                          }}
+                        />
+                      </div>
+                    </FormControl>
+                    {form.formState.errors.coverageRegionIds?.message && (
+                      <p className="text-sm text-destructive">
+                        {form.formState.errors.coverageRegionIds.message}
+                      </p>
+                    )}
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </FormSection>
+
+            <FormSection
+              title="Address & supporting documents"
+              subtitle="Manage shop locations and verification files."
+            >
+              <ShopLocationsField
+                value={shopLocations}
+                onChange={setShopLocations}
+                errors={shopLocationErrors}
+              />
+              <DocumentsUploader
+                existing={partner?.documents}
+                staged={stagedFiles}
+                onStagedChange={setStagedFiles}
+              />
+            </FormSection>
+
+            <FormSection
+              title="Account status"
+              subtitle="Disable to immediately block this partner from signing in."
+            >
+              <FormField
+                control={form.control}
+                name="isActive"
+                render={({ field }) => (
+                  <FormItem>
+                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={field.value}
+                        onChange={(e) => field.onChange(e.target.checked)}
+                      />
+                      <span>Account active</span>
+                    </label>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </FormSection>
+
+            {generalError && (
+              <div
+                role="alert"
+                className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
+              >
+                {generalError}
+              </div>
+            )}
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={handleClose}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={mutation.isPending}>
+                {mutation.isPending ? 'Saving…' : 'Save changes'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
       </DialogContent>
     </Dialog>
   );
@@ -650,71 +1037,83 @@ type PartnerDetailsDialogProps = {
 function PartnerDetailsDialog({ partner, onClose }: PartnerDetailsDialogProps) {
   return (
     <Dialog open={partner !== null} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Partner details</DialogTitle>
           <DialogDescription>
-            {partner ? `Joined ${new Date(partner.createdAt).toLocaleDateString()}` : ''}
+            {partner
+              ? `Joined ${new Date(partner.createdAt).toLocaleDateString()}`
+              : ''}
           </DialogDescription>
         </DialogHeader>
         {partner && (
-          <div className="grid gap-4 text-sm">
-            <Section label="Business">
-              <p className="font-medium">{partner.businessName}</p>
-              <p className="text-muted-foreground">
-                {rootUserOf(partner)?.email
-                  ? `${rootUserOf(partner)?.email} · `
-                  : ''}
-                {partner.phone}
-              </p>
-            </Section>
-            <Section label="Service types">
-              {partner.serviceTypes.length === 0 ? (
-                <p className="text-muted-foreground italic">None</p>
-              ) : (
-                <div className="flex flex-wrap gap-1.5">
-                  {partner.serviceTypes.map((pbt) => (
-                    <Badge key={pbt.serviceTypeId} variant="secondary">
-                      {pbt.serviceType.name}
-                    </Badge>
-                  ))}
-                </div>
-              )}
-            </Section>
-            <Section label="Approval">
-              <div className="flex items-center gap-2">
+          <div className="grid gap-6">
+            <FormSection
+              title="Business information"
+              subtitle="Public details shared with customers."
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <h4 className="text-base font-semibold">
+                  {partner.businessName}
+                </h4>
                 <Badge variant={statusVariant[partner.approvalStatus]}>
                   {partner.approvalStatus}
                 </Badge>
-                {partner.approvedAt && (
-                  <span className="text-muted-foreground text-xs">
-                    on {new Date(partner.approvedAt).toLocaleString()}
-                  </span>
+                {partner.isBanned && (
+                  <Badge variant="destructive" className="gap-1">
+                    <Ban className="size-3" />
+                    Banned
+                  </Badge>
                 )}
               </div>
-              {partner.approvalComment && (
-                <p className="text-muted-foreground mt-1">
-                  Comment: {partner.approvalComment}
+
+              <div className="grid gap-4 sm:grid-cols-2 text-sm">
+                <DetailField label="Phone">{partner.phone}</DetailField>
+                <DetailField label="Joined">
+                  {new Date(partner.createdAt).toLocaleString()}
+                </DetailField>
+              </div>
+
+              <DetailField label="Services you offer">
+                {partner.serviceTypes.length === 0 ? (
+                  <p className="text-muted-foreground italic text-sm">None</p>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5">
+                    {partner.serviceTypes.map((pbt) => (
+                      <Badge key={pbt.serviceTypeId} variant="secondary">
+                        {pbt.serviceType.name}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </DetailField>
+            </FormSection>
+
+            <FormSection
+              title="Account information"
+              subtitle="Sign-in accounts attached to this partner."
+            >
+              <DetailField label="Team seats">
+                <p className="text-sm">
+                  <span className="font-medium">
+                    {partner.users?.length ?? 0} / {partner.partnerUserLimit}
+                  </span>{' '}
+                  <span className="text-muted-foreground">
+                    partner accounts in use
+                  </span>
                 </p>
-              )}
-            </Section>
-            <Section label="Team seats">
-              <p>
-                <span className="font-medium">
-                  {partner.users?.length ?? 0} / {partner.partnerUserLimit}
-                </span>{' '}
-                <span className="text-muted-foreground">
-                  partner user accounts in use
-                </span>
-              </p>
-              {partner.users?.length > 0 && (
-                <ul className="mt-2 space-y-1">
+              </DetailField>
+
+              {partner.users && partner.users.length > 0 && (
+                <ul className="divide-y rounded-md border bg-background">
                   {partner.users.map((u) => (
                     <li
                       key={u.id}
-                      className="flex items-center gap-2 text-xs text-muted-foreground"
+                      className="flex items-center gap-2 px-3 py-2 text-sm"
                     >
-                      <span className="text-foreground">{u.email}</span>
+                      <span className="font-medium text-foreground">
+                        {u.email}
+                      </span>
                       {u.isPartnerRoot && (
                         <Badge variant="secondary">Root</Badge>
                       )}
@@ -725,88 +1124,110 @@ function PartnerDetailsDialog({ partner, onClose }: PartnerDetailsDialogProps) {
                   ))}
                 </ul>
               )}
-            </Section>
-            <Section label={`Shop locations (${partner.shopLocations.length})`}>
-              {partner.shopLocations.length === 0 ? (
-                <p className="text-muted-foreground italic">None</p>
-              ) : (
-                <ul className="space-y-2">
-                  {partner.shopLocations.map((loc) => (
-                    <li
-                      key={loc.id}
-                      className="rounded-md border px-3 py-2 bg-muted/30"
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">{loc.label}</span>
-                        {loc.isDefault && (
-                          <Badge variant="default" className="gap-1">
-                            <Star className="size-3" />
-                            Default
-                          </Badge>
+            </FormSection>
+
+            <FormSection
+              title="Service coverage area"
+              subtitle="Where this partner accepts bookings."
+            >
+              <CoverageBreakdown partner={partner} />
+            </FormSection>
+
+            <FormSection
+              title="Address & supporting documents"
+              subtitle="Shop locations and verification files."
+            >
+              <DetailField
+                label={`Shop locations (${partner.shopLocations.length})`}
+              >
+                {partner.shopLocations.length === 0 ? (
+                  <p className="text-muted-foreground italic text-sm">None</p>
+                ) : (
+                  <ul className="grid gap-2 sm:grid-cols-2">
+                    {partner.shopLocations.map((loc) => (
+                      <li
+                        key={loc.id}
+                        className="rounded-md border bg-background p-3 text-sm space-y-1"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{loc.label}</span>
+                          {loc.isDefault && (
+                            <Badge variant="default" className="gap-1">
+                              <Star className="size-3" />
+                              Default
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-muted-foreground">
+                          {loc.line1}
+                          {loc.line2 && `, ${loc.line2}`}
+                          <br />
+                          {loc.city}, {loc.state} {loc.postalCode}
+                          <br />
+                          {loc.country}
+                        </p>
+                        {loc.contactPhone && (
+                          <p className="text-xs text-muted-foreground">
+                            📞 {loc.contactPhone}
+                          </p>
                         )}
-                      </div>
-                      <p className="text-muted-foreground">
-                        {loc.line1}
-                        {loc.line2 && `, ${loc.line2}`}
-                        <br />
-                        {loc.city}, {loc.state} {loc.postalCode}
-                        <br />
-                        {loc.country}
-                      </p>
-                      {loc.contactPhone && (
-                        <p className="text-muted-foreground text-xs mt-1">
-                          📞 {loc.contactPhone}
-                        </p>
-                      )}
-                      {loc.notes && (
-                        <p className="text-muted-foreground text-xs mt-1">
-                          {loc.notes}
-                        </p>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </Section>
-            <Section label={`Documents (${partner.documents.length})`}>
-              {partner.documents.length === 0 ? (
-                <p className="text-muted-foreground italic">None</p>
-              ) : (
-                <ul className="divide-y rounded-md border bg-background">
-                  {partner.documents.map((doc) => (
-                    <li
-                      key={doc.id}
-                      className="flex items-center gap-3 px-3 py-2"
-                    >
-                      <FileText className="size-4 text-muted-foreground" />
-                      <div className="flex-1 min-w-0">
-                        <p className="truncate font-medium">{doc.fileName}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {[doc.documentType, doc.mimeType]
-                            .filter(Boolean)
-                            .join(' · ')}
-                        </p>
-                      </div>
-                      {doc.publicUrl && (
-                        <Button asChild variant="ghost" size="icon">
-                          <a
-                            href={doc.publicUrl}
-                            target="_blank"
-                            rel="noreferrer noopener"
-                          >
-                            <ExternalLink />
-                            <span className="sr-only">Open</span>
-                          </a>
-                        </Button>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </Section>
-            <Section label="Review history">
+                        {loc.notes && (
+                          <p className="text-xs text-muted-foreground italic">
+                            {loc.notes}
+                          </p>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </DetailField>
+
+              <DetailField label={`Documents (${partner.documents.length})`}>
+                {partner.documents.length === 0 ? (
+                  <p className="text-muted-foreground italic text-sm">None</p>
+                ) : (
+                  <ul className="divide-y rounded-md border bg-background">
+                    {partner.documents.map((doc) => (
+                      <li
+                        key={doc.id}
+                        className="flex items-center gap-3 px-3 py-2"
+                      >
+                        <FileText className="size-4 text-muted-foreground" />
+                        <div className="flex-1 min-w-0">
+                          <p className="truncate font-medium text-sm">
+                            {doc.fileName}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {[doc.documentType, doc.mimeType]
+                              .filter(Boolean)
+                              .join(' · ')}
+                          </p>
+                        </div>
+                        {doc.publicUrl && (
+                          <Button asChild variant="ghost" size="icon">
+                            <a
+                              href={doc.publicUrl}
+                              target="_blank"
+                              rel="noreferrer noopener"
+                            >
+                              <ExternalLink />
+                              <span className="sr-only">Open</span>
+                            </a>
+                          </Button>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </DetailField>
+            </FormSection>
+
+            <FormSection
+              title="Review history"
+              subtitle="Approval and moderation activity."
+            >
               <ApprovalHistory logs={partner.approvalLogs ?? []} />
-            </Section>
+            </FormSection>
           </div>
         )}
         <DialogFooter>
@@ -819,7 +1240,7 @@ function PartnerDetailsDialog({ partner, onClose }: PartnerDetailsDialogProps) {
   );
 }
 
-function Section({
+function DetailField({
   label,
   children,
 }: {
@@ -827,12 +1248,147 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <div>
-      <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1">
+    <div className="grid gap-1.5">
+      <p className="text-xs uppercase tracking-wide text-muted-foreground">
         {label}
       </p>
-      <div>{children}</div>
+      {children}
     </div>
+  );
+}
+
+function CoverageBreakdown({ partner }: { partner: Partner }) {
+  const areas = partner.serviceCoverageAreas ?? [];
+  if (areas.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground italic">
+        No coverage areas defined.
+      </p>
+    );
+  }
+
+  type Group = {
+    serviceTypeId: string;
+    serviceTypeName: string;
+    regionName: string;
+    cityNames: Set<string>;
+  };
+  const groups = new Map<string, Group>();
+  for (const a of areas) {
+    const key = `${a.serviceTypeId}__${a.coverageRegionId}`;
+    const existing = groups.get(key);
+    if (existing) {
+      if (a.coverageCity?.name) existing.cityNames.add(a.coverageCity.name);
+    } else {
+      groups.set(key, {
+        serviceTypeId: a.serviceTypeId,
+        serviceTypeName: a.serviceType?.name ?? 'Service',
+        regionName: a.coverageRegion?.name ?? `Region ${a.coverageRegionId}`,
+        cityNames: new Set(a.coverageCity?.name ? [a.coverageCity.name] : []),
+      });
+    }
+  }
+
+  return (
+    <ul className="grid gap-3">
+      {[...groups.values()].map((g, idx) => (
+        <li
+          key={`${g.serviceTypeId}-${idx}`}
+          className="rounded-md border bg-background p-3 space-y-2"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="font-medium text-sm">{g.serviceTypeName}</span>
+            <Badge variant="secondary" className="font-normal">
+              {g.regionName}
+            </Badge>
+          </div>
+          {g.cityNames.size > 0 ? (
+            <div className="flex flex-wrap gap-1.5">
+              {[...g.cityNames].map((city) => (
+                <Badge key={city} variant="outline" className="font-normal">
+                  {city}
+                </Badge>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground italic">
+              All cities in region
+            </p>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function ServicesCell({ partner }: { partner: Partner }) {
+  const names = partner.serviceTypes.map((s) => s.serviceType.name);
+  if (names.length === 0) {
+    return <span className="text-muted-foreground">—</span>;
+  }
+  const shown = names.slice(0, 2);
+  const extra = names.length - shown.length;
+  return (
+    <div
+      className="flex flex-wrap items-center gap-1 max-w-[220px]"
+      title={names.join(', ')}
+    >
+      {shown.map((n) => (
+        <Badge key={n} variant="secondary" className="font-normal">
+          {n}
+        </Badge>
+      ))}
+      {extra > 0 && (
+        <span className="text-xs text-muted-foreground">+{extra}</span>
+      )}
+    </div>
+  );
+}
+
+function CoverageCell({ partner }: { partner: Partner }) {
+  const areas = partner.serviceCoverageAreas ?? [];
+  if (areas.length === 0) {
+    return <span className="text-muted-foreground">—</span>;
+  }
+  const regionNames = new Set<string>();
+  for (const a of areas) {
+    const name = a.coverageRegion?.name;
+    if (name) regionNames.add(name);
+  }
+  const regions = [...regionNames];
+  const cityCount = new Set(areas.map((a) => a.coverageCityId)).size;
+  return (
+    <span
+      className="text-sm"
+      title={`${regions.join(', ')} · ${cityCount} cit${cityCount === 1 ? 'y' : 'ies'}`}
+    >
+      {regions.join(', ') || '—'}
+      {cityCount > 0 && (
+        <span className="text-muted-foreground"> · {cityCount}</span>
+      )}
+    </span>
+  );
+}
+
+function FormSection({
+  title,
+  subtitle,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-lg border bg-card/40 p-4 space-y-4">
+      <div>
+        <h3 className="text-sm font-semibold">{title}</h3>
+        {subtitle && (
+          <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>
+        )}
+      </div>
+      {children}
+    </section>
   );
 }
 

@@ -1,9 +1,7 @@
-import { useAuthStore } from '@/stores/auth';
-
 const BASE_URL = import.meta.env.VITE_API_URL;
 
 if (!BASE_URL) {
-  throw new Error('VITE_API_URL is not set. Check apps/admin/.env');
+  throw new Error('VITE_API_URL is not set. Check apps/customer/.env');
 }
 
 export type ApiResponse<T> = {
@@ -43,25 +41,15 @@ export class ApiError extends Error {
   }
 
   get code(): string | null {
-    const body = asErrorBody(this.body);
-    return body?.code ?? null;
+    return asErrorBody(this.body)?.code ?? null;
   }
 
   get fieldErrors(): Record<string, string[] | undefined> | null {
-    const body = asErrorBody(this.body);
-    return body?.details?.fieldErrors ?? null;
+    return asErrorBody(this.body)?.details?.fieldErrors ?? null;
   }
 
   get formErrors(): string[] | null {
-    const body = asErrorBody(this.body);
-    return body?.details?.formErrors ?? null;
-  }
-
-  detail<T = unknown>(key: string): T | null {
-    const body = asErrorBody(this.body);
-    if (!body?.details) return null;
-    const value = (body.details as Record<string, unknown>)[key];
-    return (value as T) ?? null;
+    return asErrorBody(this.body)?.details?.formErrors ?? null;
   }
 }
 
@@ -69,13 +57,10 @@ async function request<T>(
   path: string,
   init: RequestInit = {}
 ): Promise<ApiResponse<T>> {
-  const token = useAuthStore.getState().token;
-
   const res = await fetch(`${BASE_URL}${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...init.headers,
     },
   });
@@ -90,18 +75,12 @@ async function request<T>(
     }
   }
 
-  // The envelope's `success: false` is the source of truth for failures.
-  // Fall back to HTTP status when the body isn't a valid envelope (e.g. a
-  // proxy returns a 502 with no JSON body).
   const isEnvelopeFailure =
     body &&
     typeof body === 'object' &&
     (body as { success?: unknown }).success === false;
 
   if (!res.ok || isEnvelopeFailure) {
-    if (res.status === 401) {
-      useAuthStore.getState().logout();
-    }
     const message =
       (body && typeof body === 'object' && 'message' in body
         ? String((body as { message: unknown }).message)
@@ -112,52 +91,12 @@ async function request<T>(
   return body as ApiResponse<T>;
 }
 
-async function requestRaw<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`, {
-    headers: {
-      Accept: 'application/json',
-    },
-  });
-
-  const text = await res.text();
-  let body: unknown = null;
-  if (text) {
-    try {
-      body = JSON.parse(text);
-    } catch {
-      body = text;
-    }
-  }
-
-  if (!res.ok) {
-    const message =
-      (body && typeof body === 'object' && 'message' in body
-        ? String((body as { message: unknown }).message)
-        : null) ?? res.statusText;
-    throw new ApiError(res.status, message, body);
-  }
-
-  return body as T;
-}
-
 export const api = {
   get: <T>(path: string) => request<T>(path),
-  getRaw: <T>(path: string) => requestRaw<T>(path),
   post: <T>(path: string, data?: unknown) =>
     request<T>(path, { method: 'POST', body: JSON.stringify(data ?? {}) }),
-  put: <T>(path: string, data?: unknown) =>
-    request<T>(path, { method: 'PUT', body: JSON.stringify(data ?? {}) }),
-  patch: <T>(path: string, data?: unknown) =>
-    request<T>(path, { method: 'PATCH', body: JSON.stringify(data ?? {}) }),
-  delete: <T>(path: string, data?: unknown) =>
-    request<T>(path, { method: 'DELETE', body: JSON.stringify(data ?? {}) }),
 };
 
-/**
- * Collect all error messages for a given field, including nested keys
- * (e.g. for fieldName="serviceTypeIds", picks up "serviceTypeIds" and
- * "serviceTypeIds.0", "serviceTypeIds.1", ...).
- */
 export function collectFieldErrors(
   fieldErrors: Record<string, string[] | undefined> | null | undefined,
   fieldName: string
@@ -173,12 +112,6 @@ export function collectFieldErrors(
   return out;
 }
 
-/**
- * Pick the right message for a top-level error banner.
- * - if the API returned per-field errors, return null (errors are inline)
- * - else if the API returned form-level errors, return them joined
- * - else fall back to the top-level message
- */
 export function generalApiErrorMessage(error: unknown): string | null {
   if (!error) return null;
   if (!(error instanceof ApiError)) return 'Unexpected error. Please try again.';
