@@ -91,8 +91,35 @@ async function request<T>(
   return body as ApiResponse<T>;
 }
 
+async function requestRaw<T>(path: string): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    headers: { Accept: 'application/json' },
+  });
+
+  const text = await res.text();
+  let body: unknown = null;
+  if (text) {
+    try {
+      body = JSON.parse(text);
+    } catch {
+      body = text;
+    }
+  }
+
+  if (!res.ok) {
+    const message =
+      (body && typeof body === 'object' && 'message' in body
+        ? String((body as { message: unknown }).message)
+        : null) ?? res.statusText;
+    throw new ApiError(res.status, message, body);
+  }
+
+  return body as T;
+}
+
 export const api = {
   get: <T>(path: string) => request<T>(path),
+  getRaw: <T>(path: string) => requestRaw<T>(path),
   post: <T>(path: string, data?: unknown) =>
     request<T>(path, { method: 'POST', body: JSON.stringify(data ?? {}) }),
 };

@@ -1,25 +1,140 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, ChevronDown, Search, X } from 'lucide-react';
-import type { ServiceType } from '@/types/api';
+import { useQuery } from '@tanstack/react-query';
+import { api } from '@/lib/api';
+import type { CoverageCity, CoverageRegion } from '@/types/api';
 import { cn } from '@/lib/utils';
+import { Label } from '@/components/ui/label';
 
-type ServiceTypePickerProps = {
-  options: ServiceType[];
-  value: string[];
-  onChange: (next: string[]) => void;
-  loading?: boolean;
+const REGIONS_KEY = ['meta', 'coverage-regions'] as const;
+const CITIES_KEY = ['meta', 'coverage-cities'] as const;
+
+type CoverageAreaPickerProps = {
+  regionIds: number[];
+  cityIds: number[];
+  onRegionsChange: (next: number[]) => void;
+  onCitiesChange: (next: number[]) => void;
   disabled?: boolean;
-  placeholder?: string;
 };
 
-export function ServiceTypePicker({
+export function CoverageAreaPicker({
+  regionIds,
+  cityIds,
+  onRegionsChange,
+  onCitiesChange,
+  disabled,
+}: CoverageAreaPickerProps) {
+  const regionsQuery = useQuery({
+    queryKey: REGIONS_KEY,
+    queryFn: () => api.getRaw<CoverageRegion[]>('/json/regions.json'),
+    staleTime: 5 * 60 * 1000,
+  });
+  const citiesQuery = useQuery({
+    queryKey: CITIES_KEY,
+    queryFn: () => api.getRaw<CoverageCity[]>('/json/cities.json'),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const regions = regionsQuery.data ?? [];
+  const allCities = citiesQuery.data ?? [];
+
+  const availableCities = useMemo(
+    () =>
+      regionIds.length === 0
+        ? []
+        : allCities.filter((c) => regionIds.includes(c.coverageRegionId)),
+    [allCities, regionIds]
+  );
+
+  // If a region is deselected, drop any cities that no longer belong to it.
+  useEffect(() => {
+    if (cityIds.length === 0) return;
+    const allowed = new Set(availableCities.map((c) => c.id));
+    const filtered = cityIds.filter((id) => allowed.has(id));
+    if (filtered.length !== cityIds.length) {
+      onCitiesChange(filtered);
+    }
+  }, [availableCities, cityIds, onCitiesChange]);
+
+  const cityHelp = (() => {
+    if (regionIds.length === 0) return 'Pick at least one region to choose cities.';
+    if (availableCities.length === 0) return 'No cities yet in the selected regions.';
+    return 'Leave empty to cover all cities in the selected regions.';
+  })();
+
+  return (
+    <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-2">
+        <Label>Coverage region</Label>
+        <p className="text-xs text-muted-foreground">
+          Pick the region this partner serves.
+        </p>
+        <MultiSelectPopover
+          single
+          placeholder="Select region…"
+          loading={regionsQuery.isPending}
+          loadingText="Loading regions…"
+          emptyText="No regions available."
+          disabled={disabled}
+          options={regions.map((r) => ({
+            id: r.id,
+            label: r.name,
+          }))}
+          value={regionIds}
+          onChange={onRegionsChange}
+        />
+      </div>
+
+      <div className="grid gap-2">
+        <Label>Coverage cities</Label>
+        <p className="text-xs text-muted-foreground">{cityHelp}</p>
+        <MultiSelectPopover
+          placeholder="Select cities…"
+          loading={citiesQuery.isPending}
+          loadingText="Loading cities…"
+          emptyText={
+            regionIds.length === 0
+              ? 'Choose a region first.'
+              : 'No cities in the chosen regions.'
+          }
+          disabled={disabled || regionIds.length === 0}
+          options={availableCities.map((c) => ({
+            id: c.id,
+            label: c.name,
+          }))}
+          value={cityIds}
+          onChange={onCitiesChange}
+        />
+      </div>
+    </div>
+  );
+}
+
+type Option = { id: number; label: string; hint?: string };
+
+type MultiSelectPopoverProps = {
+  options: Option[];
+  value: number[];
+  onChange: (next: number[]) => void;
+  placeholder: string;
+  loading?: boolean;
+  loadingText?: string;
+  emptyText?: string;
+  disabled?: boolean;
+  single?: boolean;
+};
+
+function MultiSelectPopover({
   options,
   value,
   onChange,
+  placeholder,
   loading,
+  loadingText = 'Loading…',
+  emptyText = 'No options.',
   disabled,
-  placeholder = 'Select service types…',
-}: ServiceTypePickerProps) {
+  single,
+}: MultiSelectPopoverProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -59,33 +174,28 @@ export function ServiceTypePicker({
     if (!q) return options;
     return options.filter(
       (o) =>
-        o.name.toLowerCase().includes(q) ||
-        o.code.toLowerCase().includes(q)
+        o.label.toLowerCase().includes(q) ||
+        (o.hint ?? '').toLowerCase().includes(q)
     );
   }, [options, query]);
 
   if (loading) {
-    return (
-      <p className="text-sm text-muted-foreground">Loading service types…</p>
-    );
+    return <p className="text-sm text-muted-foreground">{loadingText}</p>;
   }
 
-  if (options.length === 0) {
-    return (
-      <p className="text-sm text-muted-foreground">
-        No service types available.
-      </p>
-    );
-  }
-
-  const toggle = (id: string) => {
+  const toggle = (id: number) => {
     if (disabled) return;
+    if (single) {
+      onChange(value.includes(id) ? [] : [id]);
+      setOpen(false);
+      return;
+    }
     onChange(
       value.includes(id) ? value.filter((v) => v !== id) : [...value, id]
     );
   };
 
-  const removeOne = (id: string, e: React.MouseEvent) => {
+  const removeOne = (id: number, e: React.MouseEvent) => {
     if (disabled) return;
     e.stopPropagation();
     onChange(value.filter((v) => v !== id));
@@ -123,13 +233,13 @@ export function ServiceTypePicker({
                     key={s.id}
                     className="inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary px-2 py-0.5 text-xs font-medium ring-1 ring-primary/20"
                   >
-                    {s.name}
+                    {s.label}
                     <span
                       role="button"
                       tabIndex={-1}
                       onClick={(e) => removeOne(s.id, e)}
                       className="grid place-items-center rounded-full hover:bg-primary/20 size-4 -mr-0.5"
-                      aria-label={`Remove ${s.name}`}
+                      aria-label={`Remove ${s.label}`}
                     >
                       <X className="size-3" />
                     </span>
@@ -171,7 +281,7 @@ export function ServiceTypePicker({
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search service types…"
+                placeholder="Search…"
                 className="w-full pl-9 pr-3 py-2 text-sm rounded-md bg-muted/50 outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground"
               />
             </div>
@@ -179,7 +289,7 @@ export function ServiceTypePicker({
           <ul className="max-h-72 overflow-y-auto py-1">
             {filtered.length === 0 ? (
               <li className="px-4 py-6 text-center text-sm text-muted-foreground">
-                No service types match "{query}".
+                {query ? `No matches for "${query}".` : emptyText}
               </li>
             ) : (
               filtered.map((opt) => {
@@ -207,10 +317,12 @@ export function ServiceTypePicker({
                         {isSelected && <Check className="size-3" />}
                       </span>
                       <div className="min-w-0 flex-1">
-                        <div className="font-medium truncate">{opt.name}</div>
-                        <div className="text-xs text-muted-foreground truncate">
-                          {opt.code}
-                        </div>
+                        <div className="font-medium truncate">{opt.label}</div>
+                        {opt.hint && (
+                          <div className="text-xs text-muted-foreground truncate">
+                            {opt.hint}
+                          </div>
+                        )}
                       </div>
                     </button>
                   </li>

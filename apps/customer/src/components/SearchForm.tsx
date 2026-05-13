@@ -1,11 +1,13 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { MapPin, Search } from 'lucide-react';
+import { api } from '@/lib/api';
+import type { CoverageCity, CoverageRegion } from '@/types/api';
 import { SearchableSelect } from '@/components/SearchableSelect';
 import { DateTimePicker } from '@/components/DateTimePicker';
-import { REGIONS, CITIES } from '@/lib/locations-placeholder';
 
 type SearchFormProps = {
-  serviceId: string;
+  serviceId: string | null;
 };
 
 export function SearchForm({ serviceId }: SearchFormProps) {
@@ -13,12 +15,44 @@ export function SearchForm({ serviceId }: SearchFormProps) {
   const [city, setCity] = useState<string | null>(null);
   const [datetime, setDatetime] = useState<Date | null>(null);
 
+  const regionsQuery = useQuery({
+    queryKey: ['meta', 'coverage-regions'],
+    queryFn: () => api.getRaw<CoverageRegion[]>('/json/regions.json'),
+    staleTime: 60 * 60 * 1000,
+  });
+  const citiesQuery = useQuery({
+    queryKey: ['meta', 'coverage-cities'],
+    queryFn: () => api.getRaw<CoverageCity[]>('/json/cities.json'),
+    staleTime: 60 * 60 * 1000,
+  });
+
+  const regionOptions = useMemo(
+    () =>
+      (regionsQuery.data ?? []).map((r) => ({
+        value: String(r.id),
+        label: r.name,
+      })),
+    [regionsQuery.data]
+  );
+
+  const cityOptions = useMemo(() => {
+    const all = citiesQuery.data ?? [];
+    const scoped = region
+      ? all.filter((c) => String(c.coverageRegionId) === region)
+      : all;
+    return scoped.map((c) => ({ value: String(c.id), label: c.name }));
+  }, [citiesQuery.data, region]);
+
+  const cityPlaceholder = region
+    ? 'Select city or town'
+    : 'Choose a region first';
+
   const handleSearch = () => {
     // No routing yet — just emit so we can verify wiring.
     console.log('[Tiglemp Search]', {
       serviceId,
-      region,
-      city,
+      regionId: region,
+      cityId: city,
       datetime: datetime?.toISOString() ?? null,
     });
   };
@@ -27,7 +61,9 @@ export function SearchForm({ serviceId }: SearchFormProps) {
     <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_1.2fr_auto] gap-1 p-2">
       <SearchableSelect
         label="Region"
-        placeholder="Select region"
+        placeholder={
+          regionsQuery.isPending ? 'Loading regions…' : 'Select region'
+        }
         icon={
           <span
             className="text-base leading-none grayscale opacity-80"
@@ -36,22 +72,32 @@ export function SearchForm({ serviceId }: SearchFormProps) {
             🇵🇭
           </span>
         }
-        options={REGIONS}
+        options={regionOptions}
         value={region}
         onChange={(v) => {
           setRegion(v);
           setCity(null);
         }}
+        emptyText={
+          regionsQuery.isPending ? 'Loading regions…' : 'No regions available.'
+        }
       />
 
       <div className="md:border-l md:border-border">
         <SearchableSelect
           label="City / Town"
-          placeholder="Select city or town"
+          placeholder={cityPlaceholder}
           icon={<MapPin className="size-4" />}
-          options={CITIES}
+          options={cityOptions}
           value={city}
           onChange={setCity}
+          emptyText={
+            !region
+              ? 'Choose a region first.'
+              : citiesQuery.isPending
+              ? 'Loading cities…'
+              : 'No cities in this region.'
+          }
         />
       </div>
 

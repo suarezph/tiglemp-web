@@ -8,6 +8,8 @@
   --primary-foreground: #ffffff;
   --muted-foreground: #6b6375;
   --border: #e5e4e7;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
   --radius: 0.5rem;
 }
 
@@ -18,6 +20,8 @@
   --color-primary-foreground: var(--primary-foreground);
   --color-muted-foreground: var(--muted-foreground);
   --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);

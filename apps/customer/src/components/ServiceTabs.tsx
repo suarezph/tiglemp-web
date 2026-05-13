@@ -1,15 +1,26 @@
 import { useEffect, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { ServiceItem } from '@/lib/services-catalog';
 
-type ServiceTabsProps = {
-  services: ServiceItem[];
-  activeId: string;
-  onChange: (id: string) => void;
+export type ServiceTabItem = {
+  id: string;
+  label: string;
+  icon?: React.ComponentType<{ className?: string }>;
 };
 
-export function ServiceTabs({ services, activeId, onChange }: ServiceTabsProps) {
+type ServiceTabsProps = {
+  services: ServiceTabItem[];
+  activeId: string | null;
+  onChange: (id: string) => void;
+  loading?: boolean;
+};
+
+export function ServiceTabs({
+  services,
+  activeId,
+  onChange,
+  loading,
+}: ServiceTabsProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [showLeft, setShowLeft] = useState(false);
   const [showRight, setShowRight] = useState(false);
@@ -32,6 +43,14 @@ export function ServiceTabs({ services, activeId, onChange }: ServiceTabsProps) 
 
   const scrollBy = (delta: number) =>
     ref.current?.scrollBy({ left: delta, behavior: 'smooth' });
+
+  if (loading && services.length === 0) {
+    return (
+      <div className="relative h-20 border-b border-border rounded-t-2xl overflow-hidden flex items-center px-5 text-sm text-muted-foreground">
+        Loading services…
+      </div>
+    );
+  }
 
   return (
     <div className="relative h-20 border-b border-border rounded-t-2xl overflow-hidden">
@@ -67,7 +86,7 @@ export function ServiceTabs({ services, activeId, onChange }: ServiceTabsProps) 
         aria-label="Service categories"
       >
         {services.map((s) => {
-          const Icon = s.icon;
+          const Icon = s.icon ?? Sparkles;
           const active = s.id === activeId;
           return (
             <button

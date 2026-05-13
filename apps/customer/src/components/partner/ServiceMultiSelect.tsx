@@ -96,14 +96,14 @@ export function ServiceMultiSelect({
                 {selectedServices.map((s) => (
                   <span
                     key={s.id}
-                    className="inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary px-2 py-0.5 text-xs font-medium ring-1 ring-primary/20"
+                    className="inline-flex items-center gap-1 rounded-full bg-foreground/[0.06] text-foreground px-2 py-0.5 text-xs font-medium ring-1 ring-foreground/15"
                   >
                     {s.label}
                     <span
                       role="button"
                       tabIndex={-1}
                       onClick={(e) => removeOne(s.id, e)}
-                      className="grid place-items-center rounded-full hover:bg-primary/20 size-4 -mr-0.5"
+                      className="grid place-items-center rounded-full hover:bg-foreground/15 size-4 -mr-0.5"
                       aria-label={`Remove ${s.label}`}
                     >
                       <X className="size-3" />

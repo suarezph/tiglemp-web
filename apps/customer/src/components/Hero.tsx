@@ -1,17 +1,25 @@
 import { ServiceTabs } from '@/components/ServiceTabs';
 import { SearchForm } from '@/components/SearchForm';
-import { SERVICES } from '@/lib/services-catalog';
+import { getServiceIcon } from '@/lib/service-icons';
+import type { ServiceType } from '@/types/api';
 
 // Temporary background image — to be replaced with a curated asset later.
 const HERO_BG_URL =
   'https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=2000&auto=format&fit=crop&q=80';
 
 type HeroProps = {
-  activeServiceId: string;
+  services: ServiceType[];
+  servicesLoading: boolean;
+  activeServiceId: string | null;
   onActiveServiceIdChange: (id: string) => void;
 };
 
-export function Hero({ activeServiceId, onActiveServiceIdChange }: HeroProps) {
+export function Hero({
+  services,
+  servicesLoading,
+  activeServiceId,
+  onActiveServiceIdChange,
+}: HeroProps) {
   return (
     <section className="relative isolate">
       {/* Background image */}
@@ -39,9 +47,14 @@ export function Hero({ activeServiceId, onActiveServiceIdChange }: HeroProps) {
         <div id="book" className="mt-10 md:mt-14 max-w-6xl mx-auto scroll-mt-20">
           <div className="rounded-2xl bg-white shadow-2xl ring-1 ring-black/5">
             <ServiceTabs
-              services={SERVICES}
+              services={services.map((s) => ({
+                id: s.id,
+                label: s.name,
+                icon: getServiceIcon(s.code),
+              }))}
               activeId={activeServiceId}
               onChange={onActiveServiceIdChange}
+              loading={servicesLoading}
             />
             <SearchForm serviceId={activeServiceId} />
           </div>

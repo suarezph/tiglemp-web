@@ -11,11 +11,12 @@ import {
 import {
   CheckCircle2,
   Clock,
+  ExternalLink,
   FileText,
   Loader2,
-  MapPin,
   Pencil,
   Send,
+  Star,
   XCircle,
 } from 'lucide-react';
 import {
@@ -30,8 +31,13 @@ import type {
   ApprovalLog,
   ServiceType,
   PartnerApplication,
+  PartnerShopLocationInput,
 } from '@/types/api';
 import { ServiceTypePicker } from '@/components/ServiceTypePicker';
+import { CoverageAreaPicker } from '@/components/CoverageAreaPicker';
+import { ShopLocationsField } from '@/components/ShopLocationsField';
+import { DocumentsUploader } from '@/components/DocumentsUploader';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -56,18 +62,63 @@ const editSchema = z.object({
     .string()
     .min(2, 'Business name must be at least 2 characters')
     .max(120, 'Business name is too long'),
-  serviceTypeIds: z
-    .array(z.string())
-    .min(1, 'Pick at least one service type')
-    .max(10, 'Too many service types selected'),
   phone: z
     .string()
     .min(7, 'Phone must be at least 7 characters')
     .max(30, 'Phone is too long'),
+  serviceTypeIds: z
+    .array(z.string())
+    .min(1, 'Pick at least one service type')
+    .max(20, 'Too many service types selected'),
+  coverageRegionIds: z.array(z.number()).max(1, 'Pick only one region'),
+  coverageCityIds: z.array(z.number()),
 });
 type EditValues = z.infer<typeof editSchema>;
 
 const APPLICATION_QUERY_KEY = ['partner', 'application'] as const;
+
+const sanitizeLocations = (
+  locations: PartnerShopLocationInput[]
+): PartnerShopLocationInput[] =>
+  locations.map((loc) => ({
+    ...loc,
+    line2: loc.line2?.trim() ? loc.line2.trim() : null,
+    contactPhone: loc.contactPhone?.trim() ? loc.contactPhone.trim() : null,
+    notes: loc.notes?.trim() ? loc.notes.trim() : null,
+    isDefault: !!loc.isDefault,
+  }));
+
+function locationsFromApplication(
+  app: PartnerApplication
+): PartnerShopLocationInput[] {
+  return app.shopLocations.map((loc) => ({
+    label: loc.label,
+    line1: loc.line1,
+    line2: loc.line2,
+    city: loc.city,
+    state: loc.state,
+    postalCode: loc.postalCode,
+    country: loc.country,
+    latitude: loc.latitude,
+    longitude: loc.longitude,
+    contactPhone: loc.contactPhone,
+    notes: loc.notes,
+    isDefault: loc.isDefault,
+  }));
+}
+
+function defaultsFromApplication(app: PartnerApplication): EditValues {
+  const areas = app.serviceCoverageAreas ?? [];
+  const regionIds = areas.length > 0 ? [areas[0].coverageRegionId] : [];
+  const cityIds = [...new Set(areas.map((a) => a.coverageCityId))];
+  return {
+    businessName: app.businessName,
+    phone: app.phone,
+    serviceTypeIds: app.serviceTypes.map((bt) => bt.serviceTypeId),
+    coverageRegionIds: regionIds,
+    coverageCityIds: cityIds,
+  };
+}
 
 export function Application() {
   const user = useAuthStore((s) => s.user);
@@ -77,13 +128,10 @@ export function Application() {
 
   const query = useQuery({
     queryKey: APPLICATION_QUERY_KEY,
-    queryFn: () =>
-      api.get<PartnerApplication>('/partner/application'),
+    queryFn: () => api.get<PartnerApplication>('/partner/application'),
     retry: false,
   });
 
-  // Keep the persisted auth user's approvalStatus in sync with the live
-  // application status, so refresh / route-guard checks reflect reality.
   useEffect(() => {
     if (!query.data || !user || !token) return;
     const liveStatus = query.data.data.approvalStatus;
@@ -144,11 +192,13 @@ function ApplicationContent({
   const queryClient = useQueryClient();
   const [mode, setMode] = useState<'view' | 'edit'>('view');
   const [resubmitOpen, setResubmitOpen] = useState(false);
+  const [shopLocations, setShopLocations] = useState<
+    PartnerShopLocationInput[]
+  >(() => locationsFromApplication(application));
+  const [stagedFiles, setStagedFiles] = useState<File[]>([]);
 
   const isRejected = application.approvalStatus === 'REJECTED';
 
-  // If status flips away from REJECTED (e.g. after a successful resubmit),
-  // collapse any open edit / resubmit panels so they don't dangle.
   useEffect(() => {
     if (!isRejected) {
       setMode('view');
@@ -168,20 +218,38 @@ function ApplicationContent({
     mode: 'onBlur',
   });
 
-  // When the underlying application data refreshes (e.g. after PUT), reset
-  // the form's defaults so a subsequent "Cancel" rolls back to the freshly
-  // saved values rather than the original page-load values.
   useEffect(() => {
     if (mode === 'view') {
       editForm.reset(defaultsFromApplication(application));
+      setShopLocations(locationsFromApplication(application));
+      setStagedFiles([]);
     }
     // editForm is stable; intentionally not in deps
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [application, mode]);
 
   const updateMutation = useMutation({
-    mutationFn: (values: EditValues) =>
-      api.put<PartnerApplication>('/partner/application', values),
+    mutationFn: (values: EditValues) => {
+      const regionId = values.coverageRegionIds[0];
+      const serviceCoverageAreas =
+        regionId === undefined
+          ? []
+          : values.serviceTypeIds.map((serviceTypeId) => ({
+              serviceTypeId,
+              coverageRegionId: regionId,
+              coverageCityIds: values.coverageCityIds,
+            }));
+
+      return api.put<PartnerApplication>('/partner/application', {
+        businessName: values.businessName,
+        phone: values.phone,
+        serviceTypeIds: values.serviceTypeIds,
+        serviceCoverageAreas,
+        shopLocations: sanitizeLocations(shopLocations),
+        // TODO: supportingDocuments — staged files are captured but not sent
+        // until the upload-to-storage flow is finalized server-side.
+      });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: APPLICATION_QUERY_KEY });
       setMode('view');
@@ -200,6 +268,21 @@ function ApplicationContent({
     },
   });
 
+  const apiFieldErrors =
+    updateMutation.error instanceof ApiError
+      ? updateMutation.error.fieldErrors
+      : null;
+  const shopLocationErrors = (() => {
+    if (!apiFieldErrors) return null;
+    const sliced: Record<string, string[] | undefined> = {};
+    const prefix = 'shopLocations.';
+    for (const [key, msgs] of Object.entries(apiFieldErrors)) {
+      if (!msgs?.length) continue;
+      if (key.startsWith(prefix)) sliced[key.slice(prefix.length)] = msgs;
+    }
+    return Object.keys(sliced).length > 0 ? sliced : null;
+  })();
+
   const editGeneralError = generalApiErrorMessage(updateMutation.error);
 
   return (
@@ -211,12 +294,20 @@ function ApplicationContent({
           form={editForm}
           serviceTypes={serviceTypesQuery.data?.data ?? []}
           serviceTypesLoading={serviceTypesQuery.isPending}
+          shopLocations={shopLocations}
+          onShopLocationsChange={setShopLocations}
+          shopLocationErrors={shopLocationErrors}
+          stagedFiles={stagedFiles}
+          onStagedFilesChange={setStagedFiles}
+          existingDocuments={application.documents}
           onSubmit={editForm.handleSubmit((values) =>
             updateMutation.mutate(values)
           )}
           onCancel={() => {
             updateMutation.reset();
             editForm.reset(defaultsFromApplication(application));
+            setShopLocations(locationsFromApplication(application));
+            setStagedFiles([]);
             setMode('view');
           }}
           saving={updateMutation.isPending}
@@ -246,14 +337,6 @@ function ApplicationContent({
   );
 }
 
-function defaultsFromApplication(app: PartnerApplication): EditValues {
-  return {
-    businessName: app.businessName,
-    phone: app.phone,
-    serviceTypeIds: app.serviceTypes.map((bt) => bt.serviceTypeId),
-  };
-}
-
 function applyServerFieldErrors(
   error: unknown,
   form: ReturnType<typeof useForm<EditValues>>
@@ -265,6 +348,8 @@ function applyServerFieldErrors(
     'businessName',
     'phone',
     'serviceTypeIds',
+    'coverageRegionIds',
+    'coverageCityIds',
   ];
   let firstField: keyof EditValues | null = null;
   for (const name of formFields) {
@@ -272,6 +357,14 @@ function applyServerFieldErrors(
     if (messages.length === 0) continue;
     form.setError(name, { type: 'server', message: messages.join(' ') });
     if (!firstField) firstField = name;
+  }
+  const coverageMsgs = collectFieldErrors(fieldErrors, 'serviceCoverageAreas');
+  if (coverageMsgs.length > 0) {
+    form.setError('coverageCityIds', {
+      type: 'server',
+      message: coverageMsgs.join(' '),
+    });
+    if (!firstField) firstField = 'coverageCityIds';
   }
   if (firstField) form.setFocus(firstField);
 }
@@ -323,7 +416,7 @@ function StatusCard({ application }: { application: PartnerApplication }) {
         </div>
         <CardDescription>
           {isPending &&
-            'An admin is reviewing your submission. We will email you when there is an update. You can sign in any time to check the latest status.'}
+            'An admin is reviewing your submission. We will email you when there is an update.'}
           {isRejected &&
             'Your application was sent back. Update the affected details and resubmit when ready.'}
         </CardDescription>
@@ -349,40 +442,200 @@ function DetailsCard({ application }: { application: PartnerApplication }) {
         <CardTitle>Submitted details</CardTitle>
         <CardDescription>
           {application.approvalStatus === 'REJECTED'
-            ? 'Tap “Edit application” below to change these details.'
+            ? 'Tap "Edit application" below to change these details.'
             : 'Editing is locked while your application is under review.'}
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-5">
-        <Field label="Business name" value={application.businessName} />
-        <Field label="Phone" value={application.phone} />
-        <Field
-          label="Team seats"
-          value={`${application.partnerUserLimit} total partner user accounts`}
-        />
-        <div>
-          <p className="text-xs font-medium text-muted-foreground">
-            Service types
-          </p>
-          {application.serviceTypes.length === 0 ? (
-            <p className="mt-1 text-sm text-muted-foreground">None</p>
-          ) : (
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {application.serviceTypes.map((bt) => (
-                <span
-                  key={bt.serviceTypeId}
-                  className="inline-flex items-center rounded-full border bg-muted/40 px-2.5 py-0.5 text-xs"
-                >
-                  {bt.serviceType.name}
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-        <DocumentsList documents={application.documents} />
-        <ShopLocationsList locations={application.shopLocations} />
+      <CardContent className="grid gap-6">
+        <DetailSection
+          title="Business information"
+          subtitle="What customers see about your business."
+        >
+          <div className="grid gap-4 sm:grid-cols-2 text-sm">
+            <DetailField label="Business name">
+              {application.businessName}
+            </DetailField>
+            <DetailField label="Phone">{application.phone}</DetailField>
+          </div>
+          <DetailField label="Services you offer">
+            {application.serviceTypes.length === 0 ? (
+              <p className="text-sm text-muted-foreground italic">None</p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {application.serviceTypes.map((bt) => (
+                  <Badge key={bt.serviceTypeId} variant="secondary">
+                    {bt.serviceType.name}
+                  </Badge>
+                ))}
+              </div>
+            )}
+          </DetailField>
+        </DetailSection>
+
+        <DetailSection
+          title="Service coverage area"
+          subtitle="Where you accept bookings."
+        >
+          <CoverageBreakdown application={application} />
+        </DetailSection>
+
+        <DetailSection
+          title="Address & supporting documents"
+          subtitle="Shop locations and verification files."
+        >
+          <DetailField
+            label={`Shop locations (${application.shopLocations.length})`}
+          >
+            {application.shopLocations.length === 0 ? (
+              <p className="text-sm text-muted-foreground italic">
+                No shop locations added yet.
+              </p>
+            ) : (
+              <ul className="grid gap-2 sm:grid-cols-2">
+                {application.shopLocations.map((loc) => (
+                  <li
+                    key={loc.id}
+                    className="rounded-md border bg-background p-3 text-sm space-y-1"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{loc.label}</span>
+                      {loc.isDefault && (
+                        <Badge variant="default" className="gap-1">
+                          <Star className="size-3" />
+                          Default
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-muted-foreground">
+                      {loc.line1}
+                      {loc.line2 && `, ${loc.line2}`}
+                      <br />
+                      {loc.city}, {loc.state} {loc.postalCode}
+                      <br />
+                      {loc.country}
+                    </p>
+                    {loc.contactPhone && (
+                      <p className="text-xs text-muted-foreground">
+                        📞 {loc.contactPhone}
+                      </p>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </DetailField>
+
+          <DetailField label={`Documents (${application.documents.length})`}>
+            {application.documents.length === 0 ? (
+              <p className="text-sm text-muted-foreground italic">
+                No documents uploaded yet.
+              </p>
+            ) : (
+              <ul className="divide-y rounded-md border bg-background">
+                {application.documents.map((doc) => (
+                  <li
+                    key={doc.id}
+                    className="flex items-center gap-3 px-3 py-2"
+                  >
+                    <FileText className="size-4 text-muted-foreground" />
+                    <div className="flex-1 min-w-0">
+                      <p className="truncate font-medium text-sm">
+                        {doc.fileName}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {[doc.documentType, doc.mimeType]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </p>
+                    </div>
+                    {doc.publicUrl && (
+                      <Button asChild variant="ghost" size="icon">
+                        <a
+                          href={doc.publicUrl}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                        >
+                          <ExternalLink />
+                          <span className="sr-only">Open</span>
+                        </a>
+                      </Button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </DetailField>
+        </DetailSection>
       </CardContent>
     </Card>
+  );
+}
+
+function CoverageBreakdown({
+  application,
+}: {
+  application: PartnerApplication;
+}) {
+  const areas = application.serviceCoverageAreas ?? [];
+  if (areas.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground italic">
+        No coverage areas defined.
+      </p>
+    );
+  }
+
+  type Group = {
+    serviceTypeId: string;
+    serviceTypeName: string;
+    regionName: string;
+    cityNames: Set<string>;
+  };
+  const groups = new Map<string, Group>();
+  for (const a of areas) {
+    const key = `${a.serviceTypeId}__${a.coverageRegionId}`;
+    const existing = groups.get(key);
+    if (existing) {
+      if (a.coverageCity?.name) existing.cityNames.add(a.coverageCity.name);
+    } else {
+      groups.set(key, {
+        serviceTypeId: a.serviceTypeId,
+        serviceTypeName: a.serviceType?.name ?? 'Service',
+        regionName: a.coverageRegion?.name ?? `Region ${a.coverageRegionId}`,
+        cityNames: new Set(a.coverageCity?.name ? [a.coverageCity.name] : []),
+      });
+    }
+  }
+
+  return (
+    <ul className="grid gap-3">
+      {[...groups.values()].map((g, idx) => (
+        <li
+          key={`${g.serviceTypeId}-${idx}`}
+          className="rounded-md border bg-background p-3 space-y-2"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="font-medium text-sm">{g.serviceTypeName}</span>
+            <Badge variant="secondary" className="font-normal">
+              {g.regionName}
+            </Badge>
+          </div>
+          {g.cityNames.size > 0 ? (
+            <div className="flex flex-wrap gap-1.5">
+              {[...g.cityNames].map((city) => (
+                <Badge key={city} variant="outline" className="font-normal">
+                  {city}
+                </Badge>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground italic">
+              All cities in region
+            </p>
+          )}
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -390,6 +643,12 @@ function EditCard({
   form,
   serviceTypes,
   serviceTypesLoading,
+  shopLocations,
+  onShopLocationsChange,
+  shopLocationErrors,
+  stagedFiles,
+  onStagedFilesChange,
+  existingDocuments,
   onSubmit,
   onCancel,
   saving,
@@ -398,6 +657,12 @@ function EditCard({
   form: ReturnType<typeof useForm<EditValues>>;
   serviceTypes: ServiceType[];
   serviceTypesLoading: boolean;
+  shopLocations: PartnerShopLocationInput[];
+  onShopLocationsChange: (next: PartnerShopLocationInput[]) => void;
+  shopLocationErrors: Record<string, string[] | undefined> | null;
+  stagedFiles: File[];
+  onStagedFilesChange: (next: File[]) => void;
+  existingDocuments: PartnerApplication['documents'];
   onSubmit: (e: React.FormEvent) => void;
   onCancel: () => void;
   saving: boolean;
@@ -408,60 +673,128 @@ function EditCard({
       <CardHeader>
         <CardTitle>Edit application</CardTitle>
         <CardDescription>
-          Save changes here, then resubmit your application separately when
-          you're ready.
+          Update your details and resubmit when ready.
         </CardDescription>
       </CardHeader>
       <CardContent>
         <Form {...form}>
-          <form onSubmit={onSubmit} className="space-y-4" noValidate>
-            <FormField
-              control={form.control}
-              name="businessName"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Business name</FormLabel>
-                  <FormControl>
-                    <Input {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="serviceTypeIds"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Service types</FormLabel>
-                  <FormDescription>Pick all that apply.</FormDescription>
-                  <FormControl>
-                    <div>
-                      <ServiceTypePicker
-                        options={serviceTypes}
-                        value={field.value}
-                        onChange={field.onChange}
-                        loading={serviceTypesLoading}
-                      />
-                    </div>
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="phone"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Phone</FormLabel>
-                  <FormControl>
-                    <Input {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+          <form onSubmit={onSubmit} noValidate className="grid gap-6">
+            <FormSection
+              title="Business information"
+              subtitle="Public details we share with customers."
+            >
+              <div className="grid gap-4 sm:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="businessName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Business name</FormLabel>
+                      <FormControl>
+                        <Input {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="phone"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Phone</FormLabel>
+                      <FormControl>
+                        <Input {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <FormField
+                control={form.control}
+                name="serviceTypeIds"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Services you offer</FormLabel>
+                    <FormDescription>
+                      Pick all that apply (at least one).
+                    </FormDescription>
+                    <FormControl>
+                      <div>
+                        <ServiceTypePicker
+                          options={serviceTypes}
+                          value={field.value}
+                          onChange={field.onChange}
+                          loading={serviceTypesLoading}
+                        />
+                      </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </FormSection>
+
+            <FormSection
+              title="Service coverage area"
+              subtitle="Where you accept bookings."
+            >
+              <FormField
+                control={form.control}
+                name="coverageCityIds"
+                render={() => (
+                  <FormItem>
+                    <FormControl>
+                      <div>
+                        <CoverageAreaPicker
+                          regionIds={form.watch('coverageRegionIds')}
+                          cityIds={form.watch('coverageCityIds')}
+                          onRegionsChange={(next) => {
+                            form.setValue('coverageRegionIds', next, {
+                              shouldValidate: true,
+                              shouldDirty: true,
+                            });
+                            form.clearErrors('coverageRegionIds');
+                            form.clearErrors('coverageCityIds');
+                          }}
+                          onCitiesChange={(next) => {
+                            form.setValue('coverageCityIds', next, {
+                              shouldValidate: true,
+                              shouldDirty: true,
+                            });
+                            form.clearErrors('coverageCityIds');
+                          }}
+                        />
+                      </div>
+                    </FormControl>
+                    {form.formState.errors.coverageRegionIds?.message && (
+                      <p className="text-sm text-destructive">
+                        {form.formState.errors.coverageRegionIds.message}
+                      </p>
+                    )}
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </FormSection>
+
+            <FormSection
+              title="Address & supporting documents"
+              subtitle="Manage your shop locations and verification files."
+            >
+              <ShopLocationsField
+                value={shopLocations}
+                onChange={onShopLocationsChange}
+                errors={shopLocationErrors}
+              />
+              <DocumentsUploader
+                existing={existingDocuments}
+                staged={stagedFiles}
+                onStagedChange={onStagedFilesChange}
+              />
+            </FormSection>
 
             {generalError && (
               <div
@@ -473,10 +806,7 @@ function EditCard({
             )}
 
             <div className="flex items-center gap-2">
-              <Button
-                type="submit"
-                disabled={saving || serviceTypesLoading}
-              >
+              <Button type="submit" disabled={saving || serviceTypesLoading}>
                 {saving ? 'Saving…' : 'Save changes'}
               </Button>
               <Button
@@ -563,7 +893,7 @@ function RejectedActions({
           disabled={submitting}
         />
         <div className="flex items-center justify-between text-xs text-muted-foreground">
-          <span>{localError ?? ' '}</span>
+          <span>{localError ?? ' '}</span>
           <span>{comment.length}/500</span>
         </div>
 
@@ -607,108 +937,63 @@ function RejectedActions({
   );
 }
 
-function DocumentsList({
-  documents,
+function DetailSection({
+  title,
+  subtitle,
+  children,
 }: {
-  documents: PartnerApplication['documents'];
+  title: string;
+  subtitle?: string;
+  children: React.ReactNode;
 }) {
   return (
-    <div>
-      <p className="text-xs font-medium text-muted-foreground">Documents</p>
-      {documents.length === 0 ? (
-        <p className="mt-1 text-sm text-muted-foreground">
-          No documents uploaded yet.
-        </p>
-      ) : (
-        <ul className="mt-2 space-y-2">
-          {documents.map((doc) => (
-            <li key={doc.id} className="flex items-center gap-2 text-sm">
-              <FileText className="size-4 text-muted-foreground" />
-              {doc.publicUrl ? (
-                <a
-                  href={doc.publicUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="underline underline-offset-4"
-                >
-                  {doc.fileName}
-                </a>
-              ) : (
-                <span>{doc.fileName}</span>
-              )}
-              {doc.documentType && (
-                <span className="text-xs text-muted-foreground">
-                  ({doc.documentType})
-                </span>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
+    <section className="rounded-lg border bg-card/40 p-4 space-y-4">
+      <div>
+        <h3 className="text-sm font-semibold">{title}</h3>
+        {subtitle && (
+          <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>
+        )}
+      </div>
+      {children}
+    </section>
   );
 }
 
-function ShopLocationsList({
-  locations,
+function FormSection({
+  title,
+  subtitle,
+  children,
 }: {
-  locations: PartnerApplication['shopLocations'];
+  title: string;
+  subtitle?: string;
+  children: React.ReactNode;
 }) {
   return (
-    <div>
-      <p className="text-xs font-medium text-muted-foreground">
-        Shop locations
+    <section className="rounded-lg border bg-card/40 p-4 space-y-4">
+      <div>
+        <h3 className="text-sm font-semibold">{title}</h3>
+        {subtitle && (
+          <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>
+        )}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function DetailField({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="grid gap-1.5">
+      <p className="text-xs uppercase tracking-wide text-muted-foreground">
+        {label}
       </p>
-      {locations.length === 0 ? (
-        <p className="mt-1 text-sm text-muted-foreground">
-          No shop locations added yet.
-        </p>
-      ) : (
-        <ul className="mt-2 space-y-3">
-          {locations.map((loc) => (
-            <li
-              key={loc.id}
-              className="rounded-md border bg-muted/30 p-3 text-sm"
-            >
-              <div className="flex items-center gap-2 font-medium">
-                <MapPin className="size-4 text-muted-foreground" />
-                {loc.label}
-                {loc.isDefault && (
-                  <span className="ml-1 inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary">
-                    Default
-                  </span>
-                )}
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {[
-                  loc.line1,
-                  loc.line2,
-                  loc.city,
-                  loc.state,
-                  loc.postalCode,
-                  loc.country,
-                ]
-                  .filter(Boolean)
-                  .join(', ')}
-              </p>
-              {loc.contactPhone && (
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  {loc.contactPhone}
-                </p>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-function Field({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="text-xs font-medium text-muted-foreground">{label}</p>
-      <p className="mt-1 text-sm">{value}</p>
+      {children}
     </div>
   );
 }

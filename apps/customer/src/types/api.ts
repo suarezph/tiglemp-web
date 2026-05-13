@@ -5,6 +5,18 @@ export type ServiceType = {
   description?: string | null;
 };
 
+export type CoverageRegion = {
+  id: number;
+  code: string;
+  name: string;
+};
+
+export type CoverageCity = {
+  id: number;
+  coverageRegionId: number;
+  name: string;
+};
+
 export type RegisterPartnerResponse = {
   token?: string;
   user?: { id: string; email: string };
