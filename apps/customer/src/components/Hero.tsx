@@ -5,7 +5,7 @@ import type { ServiceType } from '@/types/api';
 
 // Temporary background image — to be replaced with a curated asset later.
 const HERO_BG_URL =
-  'https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=2000&auto=format&fit=crop&q=80';
+  'https://images.unsplash.com/photo-1603712725038-e9334ae8f39f?w=2000&auto=format&fit=crop&q=80';
 
 type HeroProps = {
   services: ServiceType[];

@@ -1,10 +1,13 @@
 import { useLocation } from 'react-router-dom';
+import { useAuthStore } from '@/stores/auth';
 
 const AUTH_PATHS = ['/login', '/signup', '/forgot-password'];
 
 export function SiteNavbar() {
   const location = useLocation();
   const isAuthPage = AUTH_PATHS.includes(location.pathname);
+  const user = useAuthStore((s) => s.user);
+  const authed = !!user && user.role === 'CUSTOMER';
 
   return (
     <header className="w-full h-[60px] border-b border-border bg-background">
@@ -27,13 +30,22 @@ export function SiteNavbar() {
         </a>
 
         <nav aria-label="Primary" className="flex items-center gap-6">
-          {!isAuthPage && (
+          {authed ? (
             <a
-              href="/login"
+              href="/customer/dashboard"
               className="text-foreground text-sm font-bold hover:opacity-80 transition-opacity"
             >
-              Login / Signup
+              My bookings
             </a>
+          ) : (
+            !isAuthPage && (
+              <a
+                href="/login"
+                className="text-foreground text-sm font-bold hover:opacity-80 transition-opacity"
+              >
+                Login / Signup
+              </a>
+            )
           )}
           <a
             href="/be-a-partner"

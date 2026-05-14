@@ -1,3 +1,5 @@
+import { useAuthStore } from '@/stores/auth';
+
 const BASE_URL = import.meta.env.VITE_API_URL;
 
 if (!BASE_URL) {
@@ -57,10 +59,13 @@ async function request<T>(
   path: string,
   init: RequestInit = {}
 ): Promise<ApiResponse<T>> {
+  const token = useAuthStore.getState().token;
+
   const res = await fetch(`${BASE_URL}${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...init.headers,
     },
   });
@@ -81,6 +86,9 @@ async function request<T>(
     (body as { success?: unknown }).success === false;
 
   if (!res.ok || isEnvelopeFailure) {
+    if (res.status === 401) {
+      useAuthStore.getState().logout();
+    }
     const message =
       (body && typeof body === 'object' && 'message' in body
         ? String((body as { message: unknown }).message)
@@ -122,6 +130,10 @@ export const api = {
   getRaw: <T>(path: string) => requestRaw<T>(path),
   post: <T>(path: string, data?: unknown) =>
     request<T>(path, { method: 'POST', body: JSON.stringify(data ?? {}) }),
+  put: <T>(path: string, data?: unknown) =>
+    request<T>(path, { method: 'PUT', body: JSON.stringify(data ?? {}) }),
+  patch: <T>(path: string, data?: unknown) =>
+    request<T>(path, { method: 'PATCH', body: JSON.stringify(data ?? {}) }),
 };
 
 export function collectFieldErrors(

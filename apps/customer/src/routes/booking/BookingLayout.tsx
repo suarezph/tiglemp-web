@@ -1,7 +1,9 @@
+import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useParams } from 'react-router-dom';
-import { Check } from 'lucide-react';
+import { Check, ChevronDown, ClipboardList } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useBookingDraft } from '@/stores/booking-draft';
+import { useOnClickOutside } from '@/hooks/use-on-click-outside';
 import { SiteNavbar } from '@/components/SiteNavbar';
 import { SiteFooter } from '@/components/SiteFooter';
 
@@ -20,6 +22,26 @@ export function BookingLayout() {
   const location = useLocation();
   const currentStep = (location.pathname.split('/').pop() ?? 'packages') as StepKey;
   const draft = useBookingDraft();
+  const [summaryOpen, setSummaryOpen] = useState(false);
+  const summaryRef = useRef<HTMLDivElement>(null);
+
+  useOnClickOutside(summaryRef, () => setSummaryOpen(false));
+
+  // Close the floating summary on Escape.
+  useEffect(() => {
+    if (!summaryOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setSummaryOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [summaryOpen]);
+
+  const filledCount = [
+    !!draft.partner,
+    !!draft.package || !!draft.customRequest,
+    !!draft.address,
+  ].filter(Boolean).length;
 
   return (
     <>
@@ -27,14 +49,51 @@ export function BookingLayout() {
 
       <main className="bg-foreground/[0.02] min-h-[calc(100vh-60px)]">
         <div className="mx-auto max-w-[1200px] px-6 py-6">
-          <div className="flex items-center justify-between gap-4 mb-6">
-            <div>
-              <Link
-                to="/search"
-                className="text-sm text-muted-foreground hover:text-foreground"
+          <div className="flex items-center justify-between gap-4 mb-4">
+            <Link
+              to="/search"
+              className="text-sm text-muted-foreground hover:text-foreground"
+            >
+              ← Back to results
+            </Link>
+
+            {/* Mobile-only summary popover. The right-rail still owns desktop. */}
+            <div ref={summaryRef} className="lg:hidden relative">
+              <button
+                type="button"
+                onClick={() => setSummaryOpen((o) => !o)}
+                aria-expanded={summaryOpen}
+                aria-haspopup="dialog"
+                className={cn(
+                  'inline-flex items-center gap-2 rounded-full bg-white ring-1 ring-border px-3 py-1.5 text-sm font-semibold transition-colors',
+                  'hover:bg-foreground/[0.03]',
+                  summaryOpen && 'ring-primary/40'
+                )}
               >
-                ← Back to results
-              </Link>
+                <ClipboardList className="size-4 text-muted-foreground" />
+                Your selection
+                {filledCount > 0 && (
+                  <span className="grid place-items-center size-5 rounded-full bg-primary text-primary-foreground text-[10px] font-bold">
+                    {filledCount}
+                  </span>
+                )}
+                <ChevronDown
+                  className={cn(
+                    'size-4 text-muted-foreground transition-transform',
+                    summaryOpen && 'rotate-180'
+                  )}
+                />
+              </button>
+
+              {summaryOpen && (
+                <div
+                  role="dialog"
+                  aria-label="Your selection"
+                  className="absolute right-0 top-[calc(100%+8px)] z-50 w-[min(20rem,calc(100vw-2rem))] origin-top-right"
+                >
+                  <SummaryRail />
+                </div>
+              )}
             </div>
           </div>
 
@@ -50,7 +109,7 @@ export function BookingLayout() {
             <div className="min-w-0">
               <Outlet />
             </div>
-            <aside className="lg:sticky lg:top-6 self-start">
+            <aside className="hidden lg:block lg:sticky lg:top-6 self-start">
               <SummaryRail />
             </aside>
           </div>

@@ -1,7 +1,17 @@
-import { Link } from 'react-router-dom';
+import { useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { useMutation } from '@tanstack/react-query';
+import { CheckCircle2, Mail } from 'lucide-react';
+import {
+  api,
+  ApiError,
+  collectFieldErrors,
+  generalApiErrorMessage,
+} from '@/lib/api';
+import type { RegisterCustomerResponse } from '@/types/api';
 import { AuthShell } from '@/components/auth/AuthShell';
 import { Button } from '@/components/ui/button';
 import {
@@ -15,32 +25,49 @@ import {
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 
-const signupSchema = z.object({
-  fullName: z
-    .string()
-    .min(2, 'Enter your full name')
-    .max(120, 'Name is too long'),
-  email: z.string().email('Enter a valid email address'),
-  phone: z
-    .string()
-    .min(7, 'Enter a valid phone number')
-    .max(30, 'Phone number is too long'),
-  password: z
-    .string()
-    .min(8, 'Password must be at least 8 characters')
-    .max(72, 'Password is too long')
-    .regex(/[A-Z]/, 'Must include an uppercase letter')
-    .regex(/[a-z]/, 'Must include a lowercase letter')
-    .regex(/[0-9]/, 'Must include a number')
-    .regex(/[^A-Za-z0-9]/, 'Must include a special character'),
-  agreeToTerms: z
-    .boolean()
-    .refine((v) => v === true, 'You must agree to continue'),
-});
+const signupSchema = z
+  .object({
+    fullName: z
+      .string()
+      .min(2, 'Enter your full name')
+      .max(120, 'Name is too long'),
+    email: z.string().email('Enter a valid email address'),
+    phone: z
+      .string()
+      .min(7, 'Enter a valid phone number')
+      .max(30, 'Phone number is too long'),
+    password: z
+      .string()
+      .min(8, 'Password must be at least 8 characters')
+      .max(72, 'Password is too long')
+      .regex(/[A-Z]/, 'Must include an uppercase letter')
+      .regex(/[a-z]/, 'Must include a lowercase letter')
+      .regex(/[0-9]/, 'Must include a number')
+      .regex(/[^A-Za-z0-9]/, 'Must include a special character'),
+    confirmPassword: z.string(),
+    agreeToTerms: z
+      .boolean()
+      .refine((v) => v === true, 'You must agree to continue'),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: 'Passwords do not match',
+    path: ['confirmPassword'],
+  });
 
 type SignupValues = z.infer<typeof signupSchema>;
 
+const SERVER_FIELDS: Array<keyof SignupValues> = [
+  'fullName',
+  'email',
+  'phone',
+  'password',
+];
+
 export function CustomerSignupPage() {
+  const [params] = useSearchParams();
+  const redirect = params.get('redirect') ?? '/';
+  const [submittedEmail, setSubmittedEmail] = useState<string | null>(null);
+
   const form = useForm<SignupValues>({
     resolver: zodResolver(signupSchema),
     defaultValues: {
@@ -48,17 +75,91 @@ export function CustomerSignupPage() {
       email: '',
       phone: '',
       password: '',
+      confirmPassword: '',
       agreeToTerms: false,
     },
     mode: 'onBlur',
   });
 
-  const onSubmit = form.handleSubmit((values) => {
-    console.log('[Tiglemp Customer Signup]', {
-      ...values,
-      password: '****',
-    });
+  const mutation = useMutation({
+    mutationFn: (values: SignupValues) =>
+      api.post<RegisterCustomerResponse>('/auth/register/customer', {
+        email: values.email,
+        password: values.password,
+        fullName: values.fullName,
+        phone: values.phone,
+      }),
+    onSuccess: (_response, variables) => {
+      setSubmittedEmail(variables.email);
+    },
+    onError: (error) => {
+      if (!(error instanceof ApiError)) return;
+      const fieldErrors = error.fieldErrors;
+      if (!fieldErrors) return;
+      SERVER_FIELDS.forEach((name) => {
+        const msgs = collectFieldErrors(fieldErrors, name);
+        if (msgs.length === 0) return;
+        form.setError(name, { type: 'server', message: msgs.join(' ') });
+      });
+    },
   });
+
+  const onSubmit = form.handleSubmit((values) => mutation.mutate(values));
+
+  const generalError = generalApiErrorMessage(mutation.error);
+
+  if (submittedEmail) {
+    return (
+      <>
+        <title>Check your email — Tiglemp</title>
+        <AuthShell>
+          <div className="rounded-2xl bg-background ring-1 ring-border shadow-xl p-8 text-center">
+            <div className="size-14 mx-auto rounded-full bg-primary/15 text-primary grid place-items-center">
+              <Mail className="size-7" />
+            </div>
+            <h1 className="mt-5 text-2xl font-bold">Almost there</h1>
+            <p className="mt-2 text-sm text-muted-foreground max-w-sm mx-auto">
+              We sent a verification link to{' '}
+              <span className="font-semibold text-foreground">
+                {submittedEmail}
+              </span>
+              . Open it to activate your account, then come back here to sign in.
+            </p>
+
+            <div className="mt-6 grid gap-2">
+              <Button asChild className="h-11">
+                <Link
+                  to={`/login${
+                    redirect !== '/'
+                      ? `?redirect=${encodeURIComponent(redirect)}`
+                      : ''
+                  }`}
+                >
+                  Go to sign in
+                </Link>
+              </Button>
+              <Button asChild variant="outline" className="h-11">
+                <Link to="/">Back to home</Link>
+              </Button>
+            </div>
+
+            <p className="mt-6 text-xs text-muted-foreground">
+              Didn't get the email? Check your spam folder, or{' '}
+              <Link
+                to={`/verify-customer-email?email=${encodeURIComponent(
+                  submittedEmail
+                )}`}
+                className="font-semibold text-primary underline underline-offset-2"
+              >
+                resend the link
+              </Link>
+              .
+            </p>
+          </div>
+        </AuthShell>
+      </>
+    );
+  }
 
   return (
     <>
@@ -160,6 +261,24 @@ export function CustomerSignupPage() {
 
               <FormField
                 control={form.control}
+                name="confirmPassword"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Confirm password</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="password"
+                        autoComplete="new-password"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
                 name="agreeToTerms"
                 render={({ field }) => (
                   <FormItem>
@@ -197,12 +316,28 @@ export function CustomerSignupPage() {
                 )}
               />
 
+              {generalError && (
+                <div
+                  role="alert"
+                  className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
+                >
+                  {generalError}
+                </div>
+              )}
+
               <Button
                 type="submit"
                 className="w-full h-11 rounded-lg text-base font-bold"
-                disabled={form.formState.isSubmitting}
+                disabled={mutation.isPending}
               >
-                Create account
+                {mutation.isPending ? (
+                  <>Creating account…</>
+                ) : (
+                  <>
+                    <CheckCircle2 className="size-4" />
+                    Create account
+                  </>
+                )}
               </Button>
             </form>
           </Form>
@@ -211,7 +346,9 @@ export function CustomerSignupPage() {
         <p className="mt-6 text-center text-sm text-muted-foreground">
           Already have an account?{' '}
           <Link
-            to="/login"
+            to={`/login${
+              redirect !== '/' ? `?redirect=${encodeURIComponent(redirect)}` : ''
+            }`}
             className="font-bold text-primary underline underline-offset-2 hover:opacity-80"
           >
             Sign in

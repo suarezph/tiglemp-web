@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowRight, LogIn, UserPlus, UserRound } from 'lucide-react';
 import { useBookingDraft } from '@/stores/booking-draft';
+import { useAuthStore } from '@/stores/auth';
 import { Button } from '@/components/ui/button';
 
 const SERVICES_REQUIRING_ADDRESS = new Set<string>([
@@ -32,6 +33,7 @@ export function AuthGatePage() {
   const { partnerId = '' } = useParams();
   const navigate = useNavigate();
   const draft = useBookingDraft();
+  const authed = useAuthStore((s) => !!s.token && s.user?.role === 'CUSTOMER');
   const [mode, setMode] = useState<'choose' | 'guest'>('choose');
 
   const nextStep = (() => {
@@ -41,6 +43,18 @@ export function AuthGatePage() {
   })();
 
   const goNext = () => navigate(`/book/${partnerId}/${nextStep}`);
+
+  // Already signed in? Skip the gate entirely.
+  useEffect(() => {
+    if (authed && draft.authChoice !== 'authed') {
+      draft.setAuthChoice('authed');
+      goNext();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authed]);
+
+  const redirectTarget = `/book/${partnerId}/${nextStep}`;
+  const redirectQuery = `?redirect=${encodeURIComponent(redirectTarget)}`;
 
   const handleGuestSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,30 +80,33 @@ export function AuthGatePage() {
           </p>
         </div>
 
-        <div className="grid gap-3">
-          <Choice
-            icon={<LogIn className="size-5" />}
-            title="Log in"
-            subtitle="Use your existing Tiglemp account."
-            onClick={() => {
-              // Real wiring later: send to /login?redirect=/book/...
-              draft.setAuthChoice('authed');
-              goNext();
-            }}
-          />
-          <Choice
-            icon={<UserPlus className="size-5" />}
-            title="Create an account"
-            subtitle="Save your details for faster bookings next time."
-            onClick={() => {
-              draft.setAuthChoice('authed');
-              goNext();
-            }}
-          />
+        <div className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Choice
+              icon={<LogIn className="size-5" />}
+              title="Log in"
+              subtitle="Use your existing Tiglemp account."
+              onClick={() => navigate(`/login${redirectQuery}`)}
+              highlight
+            />
+            <Choice
+              icon={<UserPlus className="size-5" />}
+              title="Create an account"
+              subtitle="Save your details for faster bookings next time."
+              onClick={() => navigate(`/signup${redirectQuery}`)}
+            />
+          </div>
+
+          <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <span className="h-px flex-1 bg-border" />
+            or
+            <span className="h-px flex-1 bg-border" />
+          </div>
+
           <Choice
             icon={<UserRound className="size-5" />}
             title="Continue as guest"
-            subtitle="No account needed — we'll email your booking details."
+            subtitle="No account needed. Heads up: you won't be able to track your booking history, and the only way you'll receive updates or notifications is by email."
             onClick={() => setMode('guest')}
           />
         </div>
@@ -158,17 +175,23 @@ function Choice({
   title,
   subtitle,
   onClick,
+  highlight,
 }: {
   icon: React.ReactNode;
   title: string;
   subtitle: string;
   onClick: () => void;
+  highlight?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="w-full text-left rounded-2xl bg-white ring-1 ring-border hover:ring-primary/60 hover:shadow-md transition-all p-5 group"
+      className={
+        highlight
+          ? 'w-full h-full text-left rounded-2xl bg-white ring-2 ring-primary hover:shadow-md transition-all p-5 group'
+          : 'w-full h-full text-left rounded-2xl bg-white ring-1 ring-border hover:ring-primary/60 hover:shadow-md transition-all p-5 group'
+      }
     >
       <div className="flex items-start gap-4">
         <div className="grid place-items-center size-12 rounded-xl bg-primary/10 text-primary shrink-0">
