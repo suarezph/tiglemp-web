@@ -1,10 +1,14 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type { ServiceFulfillmentMode } from '@/types/api';
 
 export type BookingSearchContext = {
   serviceTypeId: string | null;
   serviceTypeName: string | null;
   serviceTypeCode: string | null;
+  /** From the service type. Determines whether the wizard shows the address step. */
+  serviceTypeFulfillmentMode: ServiceFulfillmentMode | null;
+  serviceTypeRequiresAddress: boolean | null;
   regionId: string | null;
   regionName: string | null;
   cityId: string | null;
@@ -55,13 +59,22 @@ type BookingDraftState = {
   authChoice: 'guest' | 'authed' | null;
   guestContact: BookingGuestContact | null;
   address: BookingAddressDraft | null;
+  /** Optional top-level message for the partner ("Gate code is 1234", etc). */
+  notes: string;
   setSearch: (next: BookingSearchContext) => void;
+  setServiceMeta: (
+    meta: Pick<
+      BookingSearchContext,
+      'serviceTypeFulfillmentMode' | 'serviceTypeRequiresAddress'
+    >
+  ) => void;
   setPartner: (next: BookingPartnerPick | null) => void;
   setPackage: (next: BookingPackagePick | null) => void;
   setCustomRequest: (next: BookingCustomRequest | null) => void;
   setAuthChoice: (next: 'guest' | 'authed' | null) => void;
   setGuestContact: (next: BookingGuestContact | null) => void;
   setAddress: (next: BookingAddressDraft | null) => void;
+  setNotes: (next: string) => void;
   resetSelection: () => void;
   resetAll: () => void;
 };
@@ -70,6 +83,8 @@ const EMPTY_SEARCH: BookingSearchContext = {
   serviceTypeId: null,
   serviceTypeName: null,
   serviceTypeCode: null,
+  serviceTypeFulfillmentMode: null,
+  serviceTypeRequiresAddress: null,
   regionId: null,
   regionName: null,
   cityId: null,
@@ -79,7 +94,7 @@ const EMPTY_SEARCH: BookingSearchContext = {
 
 export const useBookingDraft = create<BookingDraftState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       search: EMPTY_SEARCH,
       partner: null,
       package: null,
@@ -87,6 +102,7 @@ export const useBookingDraft = create<BookingDraftState>()(
       authChoice: null,
       guestContact: null,
       address: null,
+      notes: '',
       setSearch: (next) =>
         set({
           search: next,
@@ -96,6 +112,15 @@ export const useBookingDraft = create<BookingDraftState>()(
           authChoice: null,
           guestContact: null,
           address: null,
+          notes: '',
+        }),
+      setServiceMeta: (meta) =>
+        set({
+          search: {
+            ...get().search,
+            serviceTypeFulfillmentMode: meta.serviceTypeFulfillmentMode,
+            serviceTypeRequiresAddress: meta.serviceTypeRequiresAddress,
+          },
         }),
       setPartner: (next) =>
         set({ partner: next, package: null, customRequest: null }),
@@ -104,6 +129,7 @@ export const useBookingDraft = create<BookingDraftState>()(
       setAuthChoice: (next) => set({ authChoice: next }),
       setGuestContact: (next) => set({ guestContact: next }),
       setAddress: (next) => set({ address: next }),
+      setNotes: (next) => set({ notes: next }),
       resetSelection: () =>
         set({
           partner: null,
@@ -112,6 +138,7 @@ export const useBookingDraft = create<BookingDraftState>()(
           authChoice: null,
           guestContact: null,
           address: null,
+          notes: '',
         }),
       resetAll: () =>
         set({
@@ -122,6 +149,7 @@ export const useBookingDraft = create<BookingDraftState>()(
           authChoice: null,
           guestContact: null,
           address: null,
+          notes: '',
         }),
     }),
     {
@@ -129,3 +157,17 @@ export const useBookingDraft = create<BookingDraftState>()(
     }
   )
 );
+
+/**
+ * Decides whether the wizard should show the Address step for the currently
+ * selected service. Mirrors backend rules:
+ *   ON_SITE  → required
+ *   IN_SHOP  → skip
+ *   BOTH     → required (per product call)
+ */
+export function shouldCollectAddress(
+  mode: ServiceFulfillmentMode | null | undefined
+): boolean {
+  if (!mode) return true; // safe default while metadata is loading
+  return mode !== 'IN_SHOP';
+}

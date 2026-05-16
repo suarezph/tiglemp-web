@@ -79,10 +79,12 @@ import {
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
+import { usePageTitle } from '@/lib/use-page-title';
 
 const PACKAGES_KEY = ['partner', 'packages'] as const;
 
 export function Packages() {
+  usePageTitle('Packages');
   const me = useMe();
   const queryClient = useQueryClient();
   const assignedServices = me?.partnerProfile?.serviceTypes ?? [];

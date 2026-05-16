@@ -56,6 +56,7 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import { usePageTitle } from '@/lib/use-page-title';
 
 const editSchema = z.object({
   businessName: z
@@ -121,6 +122,7 @@ function defaultsFromApplication(app: PartnerApplication): EditValues {
 }
 
 export function Application() {
+  usePageTitle('Your application');
   const user = useAuthStore((s) => s.user);
   const setSession = useAuthStore((s) => s.setSession);
   const token = useAuthStore((s) => s.token);

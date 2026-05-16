@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useParams } from 'react-router-dom';
 import { Check, ChevronDown, ClipboardList } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useBookingDraft } from '@/stores/booking-draft';
+import { shouldCollectAddress, useBookingDraft } from '@/stores/booking-draft';
 import { useOnClickOutside } from '@/hooks/use-on-click-outside';
 import { SiteNavbar } from '@/components/SiteNavbar';
 import { SiteFooter } from '@/components/SiteFooter';
@@ -103,6 +103,9 @@ export function BookingLayout() {
             authDone={!!draft.authChoice}
             packageDone={!!draft.package || !!draft.customRequest}
             addressDone={!!draft.address}
+            showAddress={shouldCollectAddress(
+              draft.search.serviceTypeFulfillmentMode
+            )}
           />
 
           <div className="mt-6 grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-6">
@@ -127,12 +130,14 @@ function Stepper({
   packageDone,
   authDone,
   addressDone,
+  showAddress,
 }: {
   currentStep: StepKey;
   partnerId: string;
   packageDone: boolean;
   authDone: boolean;
   addressDone: boolean;
+  showAddress: boolean;
 }) {
   const stepStates: Record<StepKey, boolean> = {
     packages: packageDone,
@@ -140,9 +145,12 @@ function Stepper({
     address: addressDone,
     review: false,
   };
+  const visibleSteps = showAddress
+    ? STEP_ORDER
+    : STEP_ORDER.filter((s) => s !== 'address');
   return (
     <ol className="flex items-center gap-3 overflow-x-auto scrollbar-hide">
-      {STEP_ORDER.map((step, idx) => {
+      {visibleSteps.map((step, idx) => {
         const isActive = step === currentStep;
         const isDone = stepStates[step] && !isActive;
         return (
@@ -172,7 +180,7 @@ function Stepper({
               </span>
               {STEP_LABELS[step]}
             </NavLink>
-            {idx < STEP_ORDER.length - 1 && (
+            {idx < visibleSteps.length - 1 && (
               <span
                 aria-hidden="true"
                 className="h-px w-6 bg-border shrink-0"

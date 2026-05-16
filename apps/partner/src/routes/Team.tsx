@@ -52,6 +52,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
+import { usePageTitle } from '@/lib/use-page-title';
 
 const TEAM_KEY = ['partner', 'users'] as const;
 
@@ -60,6 +61,7 @@ const TEAM_KEY = ['partner', 'users'] as const;
 const KNOWN_FORM_FIELDS = ['email', 'password'] as const;
 
 export function Team() {
+  usePageTitle('Team');
   const currentUser = useAuthStore((s) => s.user);
   const me = useMe();
   const [createOpen, setCreateOpen] = useState(false);

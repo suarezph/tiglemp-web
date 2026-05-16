@@ -29,7 +29,7 @@ function App() {
         <Route path="address" element={<AddressPage />} />
         <Route path="review" element={<ReviewPage />} />
       </Route>
-      <Route path="/bookings/:id/confirmed" element={<ConfirmedPage />} />
+      <Route path="/bookings/:bookingCode/confirmed" element={<ConfirmedPage />} />
       <Route path="/customer/dashboard" element={<CustomerDashboardPage />} />
     </Routes>
   );

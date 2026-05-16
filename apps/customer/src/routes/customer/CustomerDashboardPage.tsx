@@ -1,30 +1,47 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import {
   CalendarClock,
   CheckCircle2,
   Clock,
+  Loader2,
   LogOut,
   MapPin,
   Plus,
   Search,
   Sparkles,
+  Star,
   UserCog,
+  XCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { api, ApiError } from '@/lib/api';
+import type {
+  CustomerBookingListItem,
+  CustomerBookingStatus,
+} from '@/types/api';
 import { useAuthStore } from '@/stores/auth';
 import { SiteNavbar } from '@/components/SiteNavbar';
 import { SiteFooter } from '@/components/SiteFooter';
+import { PageMeta } from '@/components/PageMeta';
 import { Button } from '@/components/ui/button';
-import {
-  STUB_BOOKINGS,
-  isUpcomingStatus,
-  type StubBooking,
-  type StubBookingStatus,
-} from '@/lib/customer-dashboard-stubs';
 import { ProfileModal } from '@/routes/customer/ProfileModal';
 
 type TabKey = 'upcoming' | 'past' | 'all';
+
+const UPCOMING_STATUSES = new Set<string>([
+  'PENDING_ASSIGNMENT',
+  'AWAITING_PARTNER_APPROVAL',
+  'APPROVED',
+  'IN_PROGRESS',
+]);
+
+function isUpcomingStatus(status: CustomerBookingStatus): boolean {
+  return UPCOMING_STATUSES.has(String(status));
+}
+
+const BOOKINGS_KEY = ['customer', 'bookings'] as const;
 
 export function CustomerDashboardPage() {
   const user = useAuthStore((s) => s.user);
@@ -38,10 +55,18 @@ export function CustomerDashboardPage() {
     navigate('/', { replace: true });
   };
 
+  const query = useQuery({
+    queryKey: BOOKINGS_KEY,
+    queryFn: () => api.get<CustomerBookingListItem[]>('/customer/bookings'),
+    retry: false,
+  });
+
+  const bookings = query.data?.data ?? [];
+
   const { upcoming, past, all } = useMemo(() => {
-    const u: StubBooking[] = [];
-    const p: StubBooking[] = [];
-    for (const b of STUB_BOOKINGS) {
+    const u: CustomerBookingListItem[] = [];
+    const p: CustomerBookingListItem[] = [];
+    for (const b of bookings) {
       (isUpcomingStatus(b.status) ? u : p).push(b);
     }
     u.sort(
@@ -53,17 +78,16 @@ export function CustomerDashboardPage() {
         new Date(b.scheduledAt).getTime() - new Date(a.scheduledAt).getTime()
     );
     return { upcoming: u, past: p, all: [...u, ...p] };
-  }, []);
+  }, [bookings]);
 
   const completedCount = past.filter((b) => b.status === 'COMPLETED').length;
   const greetingName = user?.email?.split('@')[0] ?? 'there';
 
-  const visible =
-    tab === 'upcoming' ? upcoming : tab === 'past' ? past : all;
+  const visible = tab === 'upcoming' ? upcoming : tab === 'past' ? past : all;
 
   return (
     <>
-      <title>My bookings — Tiglemp</title>
+      <PageMeta title="My bookings" noIndex />
 
       <SiteNavbar />
       <main className="bg-foreground/[0.02] min-h-[calc(100vh-60px)]">
@@ -114,16 +138,19 @@ export function CustomerDashboardPage() {
               icon={<CalendarClock className="size-5" />}
               label="Upcoming"
               value={upcoming.length}
+              loading={query.isPending}
             />
             <StatCard
               icon={<CheckCircle2 className="size-5" />}
               label="Completed"
               value={completedCount}
+              loading={query.isPending}
             />
             <StatCard
               icon={<Sparkles className="size-5" />}
               label="Total bookings"
-              value={STUB_BOOKINGS.length}
+              value={bookings.length}
+              loading={query.isPending}
             />
           </section>
 
@@ -142,7 +169,26 @@ export function CustomerDashboardPage() {
               />
             </div>
 
-            {visible.length === 0 ? (
+            {query.isPending ? (
+              <div className="rounded-2xl bg-white ring-1 ring-border p-10 text-center">
+                <Loader2 className="size-6 animate-spin mx-auto text-muted-foreground" />
+                <p className="mt-3 text-sm text-muted-foreground">
+                  Loading your bookings…
+                </p>
+              </div>
+            ) : query.isError ? (
+              <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-6 text-sm">
+                <p className="flex items-center gap-2 text-destructive font-semibold">
+                  <XCircle className="size-4" />
+                  Couldn't load your bookings
+                </p>
+                <p className="mt-1 text-destructive/80">
+                  {query.error instanceof ApiError
+                    ? query.error.message
+                    : 'Something went wrong. Try refreshing the page.'}
+                </p>
+              </div>
+            ) : visible.length === 0 ? (
               <EmptyState
                 title={
                   tab === 'upcoming'
@@ -205,9 +251,7 @@ function AccountStrip({
           <p className="text-[11px] uppercase tracking-wider font-semibold text-muted-foreground">
             Signed in as
           </p>
-          <p className="text-sm font-semibold truncate">
-            {email ?? 'Guest'}
-          </p>
+          <p className="text-sm font-semibold truncate">{email ?? 'Guest'}</p>
         </div>
       </div>
 
@@ -220,7 +264,10 @@ function AccountStrip({
           <UserCog className="size-4" />
           <span className="hidden sm:inline">Profile</span>
         </button>
-        <span className="hidden sm:block h-5 w-px bg-border" aria-hidden="true" />
+        <span
+          className="hidden sm:block h-5 w-px bg-border"
+          aria-hidden="true"
+        />
         <button
           type="button"
           onClick={onSignOut}
@@ -288,10 +335,12 @@ function StatCard({
   icon,
   label,
   value,
+  loading,
 }: {
   icon: React.ReactNode;
   label: string;
   value: number;
+  loading?: boolean;
 }) {
   return (
     <div className="rounded-2xl bg-white ring-1 ring-border p-5">
@@ -303,7 +352,13 @@ function StatCard({
           <p className="text-xs uppercase tracking-wider font-semibold text-muted-foreground">
             {label}
           </p>
-          <p className="text-xl font-bold mt-0.5">{value}</p>
+          <p className="text-xl font-bold mt-0.5">
+            {loading ? (
+              <span className="inline-block h-5 w-6 rounded bg-foreground/10 animate-pulse" />
+            ) : (
+              value
+            )}
+          </p>
         </div>
       </div>
     </div>
@@ -314,7 +369,7 @@ function BookingCard({
   booking,
   muted,
 }: {
-  booking: StubBooking;
+  booking: CustomerBookingListItem;
   muted?: boolean;
 }) {
   const dt = new Date(booking.scheduledAt);
@@ -328,6 +383,17 @@ function BookingCard({
         minute: '2-digit',
       });
 
+  const serviceName = booking.serviceType?.name ?? 'Service';
+  const partnerName = booking.partner?.businessName ?? 'Partner';
+  const partnerInitial = (partnerName[0] ?? '?').toUpperCase();
+  const city = booking.serviceAddress?.city ?? null;
+  const state = booking.serviceAddress?.state ?? null;
+  const locationLabel = [city, state].filter(Boolean).join(', ');
+
+  const isCustomRequest =
+    booking.selectionMode === 'CUSTOM_REQUEST' ||
+    (!booking.packageName && !!booking.customRequestText);
+
   return (
     <div
       className={cn(
@@ -338,36 +404,47 @@ function BookingCard({
       <div className="flex flex-wrap items-start gap-4">
         {/* Partner avatar */}
         <div className="size-12 shrink-0 rounded-xl bg-primary/10 text-primary grid place-items-center font-bold text-lg">
-          {booking.partnerInitial}
+          {partnerInitial}
         </div>
 
         {/* Main info */}
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <h3 className="font-bold text-base">{booking.serviceTypeName}</h3>
+            <h3 className="font-bold text-base">{serviceName}</h3>
             <StatusBadge status={booking.status} />
+            {booking.hasReview && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary px-2 py-0.5 text-[11px] font-semibold">
+                <Star className="size-3" />
+                Reviewed
+              </span>
+            )}
           </div>
           <p className="mt-0.5 text-sm text-muted-foreground">
             with{' '}
-            <span className="font-semibold text-foreground">
-              {booking.partnerName}
-            </span>
+            <span className="font-semibold text-foreground">{partnerName}</span>
           </p>
+          {(booking.packageName || isCustomRequest) && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              {booking.packageName ?? 'Custom request'}
+            </p>
+          )}
 
           <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
             <span className="inline-flex items-center gap-1.5">
               <Clock className="size-3.5" />
               {dateLabel}
             </span>
-            <span className="inline-flex items-center gap-1.5">
-              <MapPin className="size-3.5" />
-              {booking.city}, {booking.region}
-            </span>
+            {locationLabel && (
+              <span className="inline-flex items-center gap-1.5">
+                <MapPin className="size-3.5" />
+                {locationLabel}
+              </span>
+            )}
             <span className="font-mono">{booking.bookingCode}</span>
           </div>
 
           {booking.notes && (
-            <p className="mt-2 text-xs text-muted-foreground italic">
+            <p className="mt-2 text-xs text-muted-foreground italic line-clamp-2">
               {booking.notes}
             </p>
           )}
@@ -377,47 +454,78 @@ function BookingCard({
         <div className="flex flex-col items-end gap-2 shrink-0">
           <p className="text-right">
             <span className="text-[11px] uppercase tracking-wider text-muted-foreground block">
-              {booking.pricePHP === null ? 'Quote' : 'Price'}
+              {booking.price === null || booking.price === 0
+                ? 'Quote'
+                : 'Price'}
             </span>
             <span className="font-bold text-base">
-              {booking.pricePHP === null
-                ? 'TBD'
-                : `₱${booking.pricePHP.toLocaleString()}`}
+              {formatPrice(booking.price, booking.currency)}
             </span>
           </p>
           <Button asChild variant="outline" size="sm">
-            <Link to={`/customer/bookings/${booking.id}`}>View</Link>
+            <Link to={`/customer/bookings/${booking.bookingCode}`}>View</Link>
           </Button>
+          {booking.canReview && !booking.hasReview && (
+            <Button asChild size="sm" className="h-8 px-3 text-xs">
+              <Link to={`/customer/bookings/${booking.bookingCode}/review`}>
+                <Star className="size-3" />
+                Leave a review
+              </Link>
+            </Button>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-function StatusBadge({ status }: { status: StubBookingStatus }) {
-  const styles =
-    status === 'COMPLETED'
-      ? 'bg-primary/10 text-primary'
-      : status === 'CANCELLED'
-      ? 'bg-destructive/10 text-destructive'
-      : status === 'IN_PROGRESS'
-      ? 'bg-blue-100 text-blue-800'
-      : status === 'ACCEPTED'
-      ? 'bg-emerald-100 text-emerald-800'
-      : 'bg-amber-100 text-amber-800';
+function StatusBadge({ status }: { status: CustomerBookingStatus }) {
+  const norm = String(status).toUpperCase();
+  const styles = (() => {
+    switch (norm) {
+      case 'COMPLETED':
+        return 'bg-primary/10 text-primary';
+      case 'CANCELLED':
+      case 'REJECTED':
+        return 'bg-destructive/10 text-destructive';
+      case 'IN_PROGRESS':
+        return 'bg-blue-100 text-blue-800';
+      case 'APPROVED':
+        return 'bg-emerald-100 text-emerald-800';
+      case 'RELEASED':
+        return 'bg-foreground/10 text-foreground';
+      case 'PENDING_ASSIGNMENT':
+      case 'AWAITING_PARTNER_APPROVAL':
+      default:
+        return 'bg-amber-100 text-amber-800';
+    }
+  })();
 
-  const label =
-    status === 'PENDING_ASSIGNMENT'
-      ? 'Pending assignment'
-      : status === 'PENDING_PARTNER'
-      ? 'Awaiting partner'
-      : status === 'ACCEPTED'
-      ? 'Accepted'
-      : status === 'IN_PROGRESS'
-      ? 'In progress'
-      : status === 'COMPLETED'
-      ? 'Completed'
-      : 'Cancelled';
+  const label = (() => {
+    switch (norm) {
+      case 'PENDING_ASSIGNMENT':
+        return 'Pending assignment';
+      case 'AWAITING_PARTNER_APPROVAL':
+        return 'Awaiting partner';
+      case 'APPROVED':
+        return 'Approved';
+      case 'IN_PROGRESS':
+        return 'In progress';
+      case 'COMPLETED':
+        return 'Completed';
+      case 'REJECTED':
+        return 'Rejected';
+      case 'CANCELLED':
+        return 'Cancelled';
+      case 'RELEASED':
+        return 'Released';
+      default:
+        return norm
+          .toLowerCase()
+          .replace(/_/g, ' ')
+          .replace(/^./, (c) => c.toUpperCase());
+    }
+  })();
 
   return (
     <span
@@ -452,4 +560,18 @@ function EmptyState({
       {action && <div className="mt-5 flex justify-center">{action}</div>}
     </div>
   );
+}
+
+function formatPrice(
+  price: number | null | undefined,
+  currency: string | null | undefined
+): string {
+  if (price === null || price === undefined || Number.isNaN(price)) return 'TBD';
+  if (price === 0) return 'TBD';
+  const formatted = price.toLocaleString(undefined, {
+    minimumFractionDigits: Number.isInteger(price) ? 0 : 2,
+    maximumFractionDigits: 2,
+  });
+  if (currency === 'PHP' || !currency) return `₱${formatted}`;
+  return `${currency} ${formatted}`;
 }

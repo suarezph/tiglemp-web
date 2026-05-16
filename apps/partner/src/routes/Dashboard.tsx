@@ -1,6 +1,8 @@
 import { useAuthStore } from '@/stores/auth';
+import { usePageTitle } from '@/lib/use-page-title';
 
 export function Dashboard() {
+  usePageTitle('Dashboard');
   const user = useAuthStore((s) => s.user);
 
   return (

@@ -1,33 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowRight, LogIn, UserPlus, UserRound } from 'lucide-react';
-import { useBookingDraft } from '@/stores/booking-draft';
+import { shouldCollectAddress, useBookingDraft } from '@/stores/booking-draft';
 import { useAuthStore } from '@/stores/auth';
 import { Button } from '@/components/ui/button';
-
-const SERVICES_REQUIRING_ADDRESS = new Set<string>([
-  'house_cleaning',
-  'condo_cleaning',
-  'apartment_cleaning',
-  'aircon_cleaning',
-  'sofa_cleaning',
-  'mattress_cleaning',
-  'carpet_cleaning',
-  'pest_control',
-  'disinfection',
-  'pool_cleaning',
-  'window_cleaning',
-  'post_construction_cleaning',
-  'post_renovation_cleaning',
-  'airbnb_rental_turnover_cleaning',
-  'move_in_out',
-  'move_in_out_cleaning',
-  'garden_cleaning',
-  'rubbish_hauling',
-  'storage_cleaning',
-  'mobile_carwash',
-  'solar_panel_cleaning',
-]);
 
 export function AuthGatePage() {
   const { partnerId = '' } = useParams();
@@ -36,11 +12,9 @@ export function AuthGatePage() {
   const authed = useAuthStore((s) => !!s.token && s.user?.role === 'CUSTOMER');
   const [mode, setMode] = useState<'choose' | 'guest'>('choose');
 
-  const nextStep = (() => {
-    const code = draft.search.serviceTypeCode;
-    if (code && SERVICES_REQUIRING_ADDRESS.has(code)) return 'address';
-    return 'review';
-  })();
+  const nextStep = shouldCollectAddress(draft.search.serviceTypeFulfillmentMode)
+    ? 'address'
+    : 'review';
 
   const goNext = () => navigate(`/book/${partnerId}/${nextStep}`);
 
