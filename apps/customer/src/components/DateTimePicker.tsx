@@ -8,6 +8,11 @@ type DateTimePickerProps = {
   placeholder?: string;
   value: Date | null;
   onChange: (value: Date) => void;
+  /**
+   * When this value changes to a truthy number, the popover opens. Lets a
+   * parent chain pickers together (e.g. city → schedule auto-open).
+   */
+  openSignal?: number;
 };
 
 const WEEKDAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
@@ -81,10 +86,16 @@ export function DateTimePicker({
   placeholder = 'Pick a date & time',
   value,
   onChange,
+  openSignal,
 }: DateTimePickerProps) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
   useOnClickOutside(wrapRef, () => setOpen(false));
+
+  // External "please open" trigger from the parent.
+  useEffect(() => {
+    if (openSignal && openSignal > 0) setOpen(true);
+  }, [openSignal]);
 
   // The calendar's currently-viewed month (independent of `value`, so the
   // user can browse months without losing their selection).

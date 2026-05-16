@@ -17,6 +17,11 @@ type SearchableSelectProps = {
   onChange: (value: string) => void;
   icon?: React.ReactNode;
   emptyText?: string;
+  /**
+   * When this value changes to a truthy number, the popover opens. Lets a
+   * parent chain selects together (e.g. region → city auto-open).
+   */
+  openSignal?: number;
 };
 
 export function SearchableSelect({
@@ -27,6 +32,7 @@ export function SearchableSelect({
   onChange,
   icon,
   emptyText = 'No matches.',
+  openSignal,
 }: SearchableSelectProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -43,6 +49,11 @@ export function SearchableSelect({
       setQuery('');
     }
   }, [open]);
+
+  // External "please open" trigger from the parent.
+  useEffect(() => {
+    if (openSignal && openSignal > 0) setOpen(true);
+  }, [openSignal]);
 
   const selected = options.find((o) => o.value === value) ?? null;
 

@@ -32,12 +32,14 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { usePageTitle } from '@/lib/use-page-title';
 
 const DELETED_USERS_KEY = ['admin', 'deleted-users'] as const;
 const ADMIN_USERS_KEY = ['admin', 'admin-users'] as const;
 const PARTNERS_KEY = ['admin', 'partners'] as const;
 
 export function DeletedUsers() {
+  usePageTitle('Deleted users');
   const [restoreTarget, setRestoreTarget] = useState<AdminUser | null>(null);
 
   const query = useQuery({

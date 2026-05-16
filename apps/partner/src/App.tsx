@@ -3,6 +3,7 @@ import { Login } from '@/routes/Login';
 import { VerifyPartnerEmail } from '@/routes/VerifyPartnerEmail';
 import { Dashboard } from '@/routes/Dashboard';
 import { Bookings } from '@/routes/Bookings';
+import { Packages } from '@/routes/Packages';
 import { Team } from '@/routes/Team';
 import { Application } from '@/routes/Application';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
@@ -19,6 +20,7 @@ function App() {
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/team" element={<Team />} />
           <Route path="/bookings" element={<Bookings />} />
+          <Route path="/packages" element={<Packages />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/dashboard" replace />} />

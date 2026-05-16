@@ -14,8 +14,10 @@ import {
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { usePageTitle } from '@/lib/use-page-title';
 
 export function Login() {
+  usePageTitle('Sign in');
   const navigate = useNavigate();
   const setSession = useAuthStore((s) => s.setSession);
   const [email, setEmail] = useState('');

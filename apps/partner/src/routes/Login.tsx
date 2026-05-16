@@ -10,8 +10,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { CUSTOMER_BE_A_PARTNER_URL } from '@/lib/external-urls';
+import { usePageTitle } from '@/lib/use-page-title';
 
 export function Login() {
+  usePageTitle('Sign in');
   const navigate = useNavigate();
   const setSession = useAuthStore((s) => s.setSession);
   const [email, setEmail] = useState('');

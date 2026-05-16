@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { MapPin, Search } from 'lucide-react';
@@ -17,37 +17,73 @@ export function SearchForm({ serviceId }: SearchFormProps) {
   const [city, setCity] = useState<string | null>(null);
   const [datetime, setDatetime] = useState<Date | null>(null);
 
+  // Auto-progress: bump these counters when the previous step is filled so
+  // the next picker opens automatically (Skyscanner / DOHOP-style flow).
+  const [citySignal, setCitySignal] = useState(0);
+  const [scheduleSignal, setScheduleSignal] = useState(0);
+
+  // When the customer switches services in the hero tabs, the region/city
+  // they had picked may no longer be served. Clear them so the next pick
+  // starts from a clean slate.
+  useEffect(() => {
+    setRegion(null);
+    setCity(null);
+  }, [serviceId]);
+
   const regionsQuery = useQuery({
-    queryKey: ['meta', 'coverage-regions'],
-    queryFn: () => api.getRaw<CoverageRegion[]>('/json/regions.json'),
-    staleTime: 60 * 60 * 1000,
+    queryKey: ['meta', 'available-regions', serviceId],
+    queryFn: () =>
+      api.get<CoverageRegion[]>(
+        `/meta/available-regions?serviceTypeId=${encodeURIComponent(serviceId!)}`
+      ),
+    enabled: !!serviceId,
+    staleTime: 5 * 60 * 1000,
   });
   const citiesQuery = useQuery({
-    queryKey: ['meta', 'coverage-cities'],
-    queryFn: () => api.getRaw<CoverageCity[]>('/json/cities.json'),
-    staleTime: 60 * 60 * 1000,
+    queryKey: ['meta', 'available-cities', serviceId, region],
+    queryFn: () =>
+      api.get<CoverageCity[]>(
+        `/meta/available-cities?serviceTypeId=${encodeURIComponent(
+          serviceId!
+        )}&regionId=${encodeURIComponent(region!)}`
+      ),
+    enabled: !!serviceId && !!region,
+    staleTime: 5 * 60 * 1000,
   });
 
   const regionOptions = useMemo(
     () =>
-      (regionsQuery.data ?? []).map((r) => ({
+      (regionsQuery.data?.data ?? []).map((r) => ({
         value: String(r.id),
         label: r.name,
       })),
     [regionsQuery.data]
   );
 
-  const cityOptions = useMemo(() => {
-    const all = citiesQuery.data ?? [];
-    const scoped = region
-      ? all.filter((c) => String(c.coverageRegionId) === region)
-      : all;
-    return scoped.map((c) => ({ value: String(c.id), label: c.name }));
-  }, [citiesQuery.data, region]);
+  const cityOptions = useMemo(
+    () =>
+      (citiesQuery.data?.data ?? []).map((c) => ({
+        value: String(c.id),
+        label: c.name,
+      })),
+    [citiesQuery.data]
+  );
 
-  const cityPlaceholder = region
-    ? 'Select city or town'
-    : 'Choose a region first';
+  const regionPlaceholder = !serviceId
+    ? 'Pick a service first'
+    : regionsQuery.isPending
+    ? 'Loading regions…'
+    : regionOptions.length === 0
+    ? 'No regions available'
+    : 'Pick a region';
+
+  const cityPlaceholder = !region
+    ? 'Pick a region first'
+    : citiesQuery.isPending
+    ? 'Loading cities…'
+    : cityOptions.length === 0
+    ? 'No cities available'
+    : 'Pick a city or town';
 
   const canSearch = !!serviceId && !!region && !!city && !!datetime;
 
@@ -64,10 +100,8 @@ export function SearchForm({ serviceId }: SearchFormProps) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_1.2fr_auto] gap-1 p-2">
       <SearchableSelect
-        label="Region"
-        placeholder={
-          regionsQuery.isPending ? 'Loading regions…' : 'Select region'
-        }
+        label="Where to?"
+        placeholder={regionPlaceholder}
         icon={
           <span
             className="text-base leading-none grayscale opacity-80"
@@ -81,23 +115,32 @@ export function SearchForm({ serviceId }: SearchFormProps) {
         onChange={(v) => {
           setRegion(v);
           setCity(null);
+          setCitySignal((n) => n + 1);
         }}
         emptyText={
-          regionsQuery.isPending ? 'Loading regions…' : 'No regions available.'
+          !serviceId
+            ? 'Pick a service first.'
+            : regionsQuery.isPending
+            ? 'Loading regions…'
+            : 'No partners serving that service yet.'
         }
       />
 
       <div className="md:border-l md:border-border">
         <SearchableSelect
-          label="City / Town"
+          label="Where exactly?"
           placeholder={cityPlaceholder}
           icon={<MapPin className="size-4" />}
           options={cityOptions}
           value={city}
-          onChange={setCity}
+          onChange={(v) => {
+            setCity(v);
+            setScheduleSignal((n) => n + 1);
+          }}
+          openSignal={citySignal}
           emptyText={
             !region
-              ? 'Choose a region first.'
+              ? 'Pick a region first.'
               : citiesQuery.isPending
               ? 'Loading cities…'
               : 'No cities in this region.'
@@ -107,10 +150,11 @@ export function SearchForm({ serviceId }: SearchFormProps) {
 
       <div className="md:border-l md:border-border">
         <DateTimePicker
-          label="Schedule"
+          label="When?"
           placeholder="Pick a date & time"
           value={datetime}
           onChange={setDatetime}
+          openSignal={scheduleSignal}
         />
       </div>
 

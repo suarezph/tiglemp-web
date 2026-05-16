@@ -12,6 +12,7 @@ import {
 import type { LoginResponse } from '@/types/api';
 import { useAuthStore } from '@/stores/auth';
 import { AuthShell } from '@/components/auth/AuthShell';
+import { PageMeta } from '@/components/PageMeta';
 import { Button } from '@/components/ui/button';
 import {
   Form,
@@ -94,10 +95,10 @@ export function CustomerLoginPage() {
 
   return (
     <>
-      <title>Sign in to Tiglemp</title>
-      <meta
-        name="description"
-        content="Sign in to your Tiglemp account to manage your cleaning bookings."
+      <PageMeta
+        title="Sign in"
+        description="Sign in to your Tiglemp account to manage bookings and track service requests."
+        noIndex
       />
 
       <AuthShell>

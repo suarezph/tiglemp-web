@@ -70,6 +70,7 @@ import { ShopLocationsField } from '@/components/ShopLocationsField';
 import { DocumentsUploader } from '@/components/DocumentsUploader';
 import { ServiceTypePicker } from '@/components/ServiceTypePicker';
 import { CoverageAreaPicker } from '@/components/CoverageAreaPicker';
+import { usePageTitle } from '@/lib/use-page-title';
 
 const PARTNERS_KEY = ['admin', 'partners'] as const;
 const SERVICE_TYPES_KEY = ['meta', 'service-types'] as const;
@@ -107,6 +108,7 @@ const sanitizeLocations = (
   }));
 
 export function Partners() {
+  usePageTitle('Partners');
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Partner | null>(null);
   const [detailsTarget, setDetailsTarget] = useState<Partner | null>(null);
@@ -359,6 +361,7 @@ function CreatePartnerDialog({ open, onOpenChange }: CreatePartnerDialogProps) {
         phone: values.phone,
         serviceTypeIds: values.serviceTypeIds,
         partnerUserLimit: 5,
+        partnerPackageLimit: 10,
         approvalStatus: 'APPROVED',
         serviceCoverageAreas,
         shopLocations: sanitizeLocations(shopLocations),
@@ -663,6 +666,11 @@ const editPartnerSchema = z.object({
     .int()
     .min(1, 'Must allow at least 1 seat')
     .max(50, 'Too many seats'),
+  partnerPackageLimit: z
+    .number()
+    .int()
+    .min(1, 'Must allow at least 1 package')
+    .max(100, 'Too many packages'),
   isActive: z.boolean(),
 });
 
@@ -684,6 +692,7 @@ function EditPartnerDialog({ partner, onClose }: EditPartnerDialogProps) {
       coverageRegionIds: [],
       coverageCityIds: [],
       partnerUserLimit: 1,
+      partnerPackageLimit: 10,
       isActive: true,
     },
     mode: 'onBlur',
@@ -703,6 +712,7 @@ function EditPartnerDialog({ partner, onClose }: EditPartnerDialogProps) {
       coverageRegionIds: regionIds,
       coverageCityIds: cityIds,
       partnerUserLimit: partner.partnerUserLimit,
+      partnerPackageLimit: partner.partnerPackageLimit ?? 10,
       isActive: rootUserOf(partner)?.isActive ?? true,
     });
     setShopLocations(
@@ -741,6 +751,7 @@ function EditPartnerDialog({ partner, onClose }: EditPartnerDialogProps) {
         phone: values.phone,
         serviceTypeIds: values.serviceTypeIds,
         partnerUserLimit: values.partnerUserLimit,
+        partnerPackageLimit: values.partnerPackageLimit,
         isActive: values.isActive,
         serviceCoverageAreas,
         shopLocations: sanitizeLocations(shopLocations),
@@ -763,6 +774,7 @@ function EditPartnerDialog({ partner, onClose }: EditPartnerDialogProps) {
         'coverageRegionIds',
         'coverageCityIds',
         'partnerUserLimit',
+        'partnerPackageLimit',
         'isActive',
       ];
       let firstField: keyof EditPartnerFormValues | null = null;
@@ -893,34 +905,63 @@ function EditPartnerDialog({ partner, onClose }: EditPartnerDialogProps) {
                 </p>
               </DetailField>
 
-              <FormField
-                control={form.control}
-                name="partnerUserLimit"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Team seats</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        min={1}
-                        max={50}
-                        value={field.value}
-                        onChange={(e) =>
-                          field.onChange(Number(e.target.value) || 1)
-                        }
-                        onBlur={field.onBlur}
-                        name={field.name}
-                        ref={field.ref}
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      Total partner accounts allowed (root counts toward this
-                      limit). Currently {usersInUse} in use.
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="partnerUserLimit"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Team seats</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          min={1}
+                          max={50}
+                          value={field.value}
+                          onChange={(e) =>
+                            field.onChange(Number(e.target.value) || 1)
+                          }
+                          onBlur={field.onBlur}
+                          name={field.name}
+                          ref={field.ref}
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        Total partner accounts allowed (root counts toward this
+                        limit). Currently {usersInUse} in use.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="partnerPackageLimit"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Package limit</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          min={1}
+                          max={100}
+                          value={field.value}
+                          onChange={(e) =>
+                            field.onChange(Number(e.target.value) || 1)
+                          }
+                          onBlur={field.onBlur}
+                          name={field.name}
+                          ref={field.ref}
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        Maximum number of packages this partner can publish.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
             </FormSection>
 
             <FormSection
@@ -1093,16 +1134,28 @@ function PartnerDetailsDialog({ partner, onClose }: PartnerDetailsDialogProps) {
               title="Account information"
               subtitle="Sign-in accounts attached to this partner."
             >
-              <DetailField label="Team seats">
-                <p className="text-sm">
-                  <span className="font-medium">
-                    {partner.users?.length ?? 0} / {partner.partnerUserLimit}
-                  </span>{' '}
-                  <span className="text-muted-foreground">
-                    partner accounts in use
-                  </span>
-                </p>
-              </DetailField>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <DetailField label="Team seats">
+                  <p className="text-sm">
+                    <span className="font-medium">
+                      {partner.users?.length ?? 0} / {partner.partnerUserLimit}
+                    </span>{' '}
+                    <span className="text-muted-foreground">
+                      accounts in use
+                    </span>
+                  </p>
+                </DetailField>
+                <DetailField label="Package limit">
+                  <p className="text-sm">
+                    <span className="font-medium">
+                      {partner.partnerPackageLimit ?? '—'}
+                    </span>{' '}
+                    <span className="text-muted-foreground">
+                      packages allowed
+                    </span>
+                  </p>
+                </DetailField>
+              </div>
 
               {partner.users && partner.users.length > 0 && (
                 <ul className="divide-y rounded-md border bg-background">

@@ -36,6 +36,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
+import { usePageTitle } from '@/lib/use-page-title';
 
 type PeriodOption = { value: number; label: string };
 const periodOptions: PeriodOption[] = [
@@ -96,6 +97,7 @@ function buildDailySeries(
 }
 
 export function Dashboard() {
+  usePageTitle('Dashboard');
   const [days, setDays] = useState<number>(9);
   const [partnerId, setPartnerId] = useState<string>(ALL_PARTNERS);
 

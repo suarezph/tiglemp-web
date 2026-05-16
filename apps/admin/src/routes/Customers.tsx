@@ -31,6 +31,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { AddressFields, emptyAddress } from '@/components/AddressFields';
+import { usePageTitle } from '@/lib/use-page-title';
 
 const CUSTOMERS_KEY = ['admin', 'customers'] as const;
 
@@ -38,6 +39,7 @@ const isAddressFilled = (a: Address) =>
   Boolean(a.label || a.line1 || a.city || a.state || a.postalCode || a.country);
 
 export function Customers() {
+  usePageTitle('Customers');
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Customer | null>(null);

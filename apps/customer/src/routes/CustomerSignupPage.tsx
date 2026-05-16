@@ -13,6 +13,7 @@ import {
 } from '@/lib/api';
 import type { RegisterCustomerResponse } from '@/types/api';
 import { AuthShell } from '@/components/auth/AuthShell';
+import { PageMeta } from '@/components/PageMeta';
 import { Button } from '@/components/ui/button';
 import {
   Form,
@@ -111,7 +112,7 @@ export function CustomerSignupPage() {
   if (submittedEmail) {
     return (
       <>
-        <title>Check your email — Tiglemp</title>
+        <PageMeta title="Check your email" noIndex />
         <AuthShell>
           <div className="rounded-2xl bg-background ring-1 ring-border shadow-xl p-8 text-center">
             <div className="size-14 mx-auto rounded-full bg-primary/15 text-primary grid place-items-center">
@@ -163,10 +164,9 @@ export function CustomerSignupPage() {
 
   return (
     <>
-      <title>Create your Tiglemp account</title>
-      <meta
-        name="description"
-        content="Sign up for free and book trusted local cleaning services in 60 seconds. New customers get 10% off their first booking."
+      <PageMeta
+        title="Create your account"
+        description="Sign up free and book trusted local cleaning services in 60 seconds."
       />
 
       <AuthShell>

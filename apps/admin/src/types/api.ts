@@ -209,6 +209,7 @@ export type Partner = {
   businessName: string;
   phone: string;
   partnerUserLimit: number;
+  partnerPackageLimit: number;
   approvalStatus: ApprovalStatus;
   approvalComment: string | null;
   approvedAt: string | null;

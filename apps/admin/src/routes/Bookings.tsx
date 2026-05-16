@@ -48,6 +48,7 @@ import {
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import { AddressFields, emptyAddress } from '@/components/AddressFields';
+import { usePageTitle } from '@/lib/use-page-title';
 
 const BOOKINGS_KEY = ['admin', 'bookings'] as const;
 const PARTNERS_KEY = ['admin', 'partners'] as const;
@@ -81,6 +82,7 @@ const formatMoney = (amount: string | null, currency: string) =>
       }).format(Number(amount));
 
 export function Bookings() {
+  usePageTitle('Bookings');
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
   const [assignTarget, setAssignTarget] = useState<Booking | null>(null);

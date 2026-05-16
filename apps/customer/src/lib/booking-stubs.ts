@@ -92,14 +92,15 @@ export const STUB_PARTNERS: StubPartner[] = [
   {
     id: 'p-no-packages',
     businessName: 'Quirky Cleans Studio',
-    blurb: 'Boutique cleaning — everything is a custom quote.',
+    blurb: 'Boutique cleaning crew with eco-friendly products and a signature deep clean.',
     ratingAverage: 4.4,
     ratingCount: 78,
     yearsOnPlatform: 1,
-    baseFromPHP: null,
+    baseFromPHP: 900,
     serviceTypeCodes: [
       'house_cleaning',
       'condo_cleaning',
+      'airbnb_rental_turnover_cleaning',
       'post_construction_cleaning',
     ],
     coverageCityIds: ['18', '969', '1002'],
@@ -107,6 +108,7 @@ export const STUB_PARTNERS: StubPartner[] = [
 ];
 
 const PACKAGES: StubPackage[] = [
+  // --- Bright Shine Carwash ---
   {
     id: 'pk-bright-standard',
     partnerId: 'p-bright-shine',
@@ -192,6 +194,145 @@ const PACKAGES: StubPackage[] = [
     durationMinutes: 1440,
     description: 'Drop-off or pickup. 24-hour turnaround in metro cities.',
     inclusions: ['Pickup option', 'Wash + dry', 'Fold + bag', '24h turnaround'],
+  },
+  {
+    id: 'pk-fresh-dryclean',
+    partnerId: 'p-fresh-laundry',
+    serviceTypeCode: 'dry_cleaning',
+    name: 'Dry-clean (per piece)',
+    priceFromPHP: 220,
+    durationMinutes: 2880,
+    description: 'Professional dry-clean for suits, gowns, and delicates.',
+    inclusions: ['Pickup option', 'Per-piece pricing', '48h turnaround', 'Eco solvents'],
+  },
+
+  // --- Clean Quarters PH (condo / apartment / Airbnb / house) ---
+  {
+    id: 'pk-clean-apartment',
+    partnerId: 'p-clean-quarters',
+    serviceTypeCode: 'apartment_cleaning',
+    name: 'Apartment Refresh',
+    priceFromPHP: 1500,
+    durationMinutes: 240,
+    description: 'General cleaning for apartments up to 60 sqm.',
+    inclusions: ['Living + bedroom', 'Kitchen + bath', 'Floor mop', 'Window wipe'],
+  },
+  {
+    id: 'pk-clean-airbnb-standard',
+    partnerId: 'p-clean-quarters',
+    serviceTypeCode: 'airbnb_rental_turnover_cleaning',
+    name: 'Standard Turnover',
+    priceFromPHP: 950,
+    durationMinutes: 150,
+    description: 'Fast reset for studios + 1-BR units between guest stays.',
+    inclusions: [
+      'Linen change',
+      'Bath + kitchen reset',
+      'Trash out',
+      'Photo report',
+    ],
+  },
+  {
+    id: 'pk-clean-airbnb-deep',
+    partnerId: 'p-clean-quarters',
+    serviceTypeCode: 'airbnb_rental_turnover_cleaning',
+    name: 'Deep Turnover',
+    priceFromPHP: 1700,
+    durationMinutes: 240,
+    description:
+      'For long stays, end-of-month resets, or before VIP guest arrivals.',
+    inclusions: [
+      'Linen change',
+      'Deep bathroom clean',
+      'Kitchen + appliances',
+      'Restock essentials',
+      'Photo report',
+    ],
+    popular: true,
+  },
+  {
+    id: 'pk-clean-house',
+    partnerId: 'p-clean-quarters',
+    serviceTypeCode: 'house_cleaning',
+    name: 'House Clean',
+    priceFromPHP: 1800,
+    durationMinutes: 270,
+    description: 'Top-to-bottom clean for 2-3 BR homes.',
+    inclusions: ['Up to 3 BR', '2 bathrooms', 'Kitchen surfaces', 'Floor mop'],
+  },
+
+  // --- Quirky Cleans Studio (house / condo / post-construction) ---
+  {
+    id: 'pk-quirky-house-light',
+    partnerId: 'p-no-packages',
+    serviceTypeCode: 'house_cleaning',
+    name: 'Light Maintenance Clean',
+    priceFromPHP: 900,
+    durationMinutes: 120,
+    description: 'A boutique tidy-up — perfect for in-between deep cleans.',
+    inclusions: ['Dust + wipe', 'Bath + kitchen tidy', 'Floor mop', 'Eco products'],
+  },
+  {
+    id: 'pk-quirky-house-deep',
+    partnerId: 'p-no-packages',
+    serviceTypeCode: 'house_cleaning',
+    name: 'Signature Deep Clean',
+    priceFromPHP: 2400,
+    durationMinutes: 360,
+    description:
+      'Boutique deep clean with eco-friendly products, oven and fridge included.',
+    inclusions: [
+      'Oven + fridge',
+      'Window tracks',
+      'Cabinet wipe-down',
+      'Eco products',
+      'Aromatherapy finish',
+    ],
+    popular: true,
+  },
+  {
+    id: 'pk-quirky-airbnb',
+    partnerId: 'p-no-packages',
+    serviceTypeCode: 'airbnb_rental_turnover_cleaning',
+    name: 'Boutique Turnover',
+    priceFromPHP: 1400,
+    durationMinutes: 180,
+    description:
+      'Hand-styled turnover with linen change, restock, and a welcome note.',
+    inclusions: [
+      'Linen change',
+      'Restock essentials',
+      'Welcome note',
+      'Photo report',
+    ],
+  },
+  {
+    id: 'pk-quirky-postcon',
+    partnerId: 'p-no-packages',
+    serviceTypeCode: 'post_construction_cleaning',
+    name: 'Post-Reno Detail',
+    priceFromPHP: 3800,
+    durationMinutes: 480,
+    description:
+      'Dust-out and detail clean after renovations or build-outs.',
+    inclusions: [
+      'Dust extraction',
+      'Surface polish',
+      'Grout + tile',
+      'Window tracks',
+    ],
+  },
+
+  // --- CoolAir Pros (extra package) ---
+  {
+    id: 'pk-coolair-window',
+    partnerId: 'p-coolair',
+    serviceTypeCode: 'aircon_cleaning',
+    name: 'Window-Type Clean (1 unit)',
+    priceFromPHP: 450,
+    durationMinutes: 45,
+    description: 'Filter, fins, and drain clean for window-type aircons.',
+    inclusions: ['Filter clean', 'Fin wash', 'Drain flush', 'Performance test'],
   },
 ];
 

@@ -33,8 +33,10 @@ export type MeResponse = {
         businessName: string;
         phone: string;
         partnerUserLimit: number;
+        partnerPackageLimit?: number;
         approvalStatus: ApprovalStatus;
         isBanned: boolean;
+        serviceTypes?: PartnerServiceType[];
       }
     | null;
   adminProfile: { id: string; fullName: string | null } | null;
@@ -221,3 +223,39 @@ export type PartnerApplication = {
   approvalLogs: ApprovalLog[];
 };
 
+export type PartnerPackage = {
+  id: string;
+  partnerId: string;
+  serviceTypeId: string;
+  name: string;
+  description: string;
+  price: number;
+  currency: string;
+  estimatedDurationMinutes: number;
+  features: string[];
+  badgeLabel: string | null;
+  isActive: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+  serviceType?: ServiceType & {
+    description?: string | null;
+    detailModelKey?: string | null;
+    fulfillmentMode?: string | null;
+    requiresAddress?: boolean | null;
+    isActive?: boolean;
+  };
+};
+
+export type PartnerPackagePayload = {
+  serviceTypeId: string;
+  name: string;
+  description: string;
+  price: number;
+  currency: string;
+  estimatedDurationMinutes: number;
+  features: string[];
+  badgeLabel?: string | null;
+  isActive?: boolean;
+  sortOrder?: number;
+};

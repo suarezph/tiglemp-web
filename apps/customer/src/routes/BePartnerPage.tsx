@@ -1,3 +1,4 @@
+import { PageMeta } from '@/components/PageMeta';
 import { SiteNavbar } from '@/components/SiteNavbar';
 import { SiteFooter } from '@/components/SiteFooter';
 import { PartnerHero } from '@/components/partner/PartnerHero';
@@ -9,10 +10,10 @@ import { PartnerFaq } from '@/components/partner/PartnerFaq';
 export function BePartnerPage() {
   return (
     <>
-      <title>Be a Tiglemp partner — Grow your cleaning business online</title>
-      <meta
-        name="description"
-        content="Reach more customers, take bookings 24/7, and grow your cleaning business with Tiglemp. Free to join — apply in 60 seconds."
+      <PageMeta
+        title="Be a Tiglemp partner — grow your cleaning business online"
+        description="Reach more local customers, take bookings 24/7, and grow your cleaning, carwash or laundry business with Tiglemp. Free to join — apply in 60 seconds."
+        suffix={false}
       />
 
       <SiteNavbar />

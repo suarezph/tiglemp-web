@@ -57,10 +57,12 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
+import { usePageTitle } from '@/lib/use-page-title';
 
 const ADMIN_USERS_KEY = ['admin', 'admin-users'] as const;
 
 export function AdminUsers() {
+  usePageTitle('Admin users');
   const currentUser = useAuthStore((s) => s.user);
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<AdminUser | null>(null);
