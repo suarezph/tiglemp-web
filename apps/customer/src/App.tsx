@@ -12,6 +12,7 @@ import { AddressPage } from '@/routes/booking/AddressPage';
 import { ReviewPage } from '@/routes/booking/ReviewPage';
 import { ConfirmedPage } from '@/routes/booking/ConfirmedPage';
 import { CustomerDashboardPage } from '@/routes/customer/CustomerDashboardPage';
+import { CustomerBookingDetailPage } from '@/routes/customer/CustomerBookingDetailPage';
 
 function App() {
   return (
@@ -31,6 +32,9 @@ function App() {
       </Route>
       <Route path="/bookings/:bookingCode/confirmed" element={<ConfirmedPage />} />
       <Route path="/customer/dashboard" element={<CustomerDashboardPage />} />
+      <Route
+        path="/customer/bookings/:bookingId"
+        element={<CustomerBookingDetailPage />} />
     </Routes>
   );
 }

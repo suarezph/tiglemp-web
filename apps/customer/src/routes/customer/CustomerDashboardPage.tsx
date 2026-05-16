@@ -440,34 +440,28 @@ function BookingCard({
                 {locationLabel}
               </span>
             )}
-            <span className="font-mono">{booking.bookingCode}</span>
           </div>
-
-          {booking.notes && (
-            <p className="mt-2 text-xs text-muted-foreground italic line-clamp-2">
-              {booking.notes}
-            </p>
-          )}
         </div>
 
         {/* Price + action */}
         <div className="flex flex-col items-end gap-2 shrink-0">
-          <p className="text-right">
-            <span className="text-[11px] uppercase tracking-wider text-muted-foreground block">
-              {booking.price === null || booking.price === 0
-                ? 'Quote'
-                : 'Price'}
-            </span>
-            <span className="font-bold text-base">
-              {formatPrice(booking.price, booking.currency)}
-            </span>
-          </p>
+          {(() => {
+            const priceInfo = pickDisplayPrice(booking);
+            return (
+              <p className="text-right">
+                <span className="text-[11px] uppercase tracking-wider text-muted-foreground block">
+                  {priceInfo.label}
+                </span>
+                <span className="font-bold text-base">{priceInfo.value}</span>
+              </p>
+            );
+          })()}
           <Button asChild variant="outline" size="sm">
-            <Link to={`/customer/bookings/${booking.bookingCode}`}>View</Link>
+            <Link to={`/customer/bookings/${booking.id}`}>View</Link>
           </Button>
           {booking.canReview && !booking.hasReview && (
             <Button asChild size="sm" className="h-8 px-3 text-xs">
-              <Link to={`/customer/bookings/${booking.bookingCode}/review`}>
+              <Link to={`/customer/bookings/${booking.id}/review`}>
                 <Star className="size-3" />
                 Leave a review
               </Link>
@@ -562,16 +556,57 @@ function EmptyState({
   );
 }
 
+// API may return numeric fields as strings ("0", "1700.00"). Normalise.
+function toNumberOrNull(v: unknown): number | null {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  if (typeof v === 'string' && v.trim() !== '') {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
 function formatPrice(
-  price: number | null | undefined,
+  price: number | string | null | undefined,
   currency: string | null | undefined
 ): string {
-  if (price === null || price === undefined || Number.isNaN(price)) return 'TBD';
-  if (price === 0) return 'TBD';
-  const formatted = price.toLocaleString(undefined, {
-    minimumFractionDigits: Number.isInteger(price) ? 0 : 2,
+  const n = toNumberOrNull(price);
+  if (n === null) return 'TBD';
+  const formatted = n.toLocaleString(undefined, {
+    minimumFractionDigits: Number.isInteger(n) ? 0 : 2,
     maximumFractionDigits: 2,
   });
   if (currency === 'PHP' || !currency) return `₱${formatted}`;
   return `${currency} ${formatted}`;
+}
+
+/**
+ * Picks the most useful price-ish value to show on a booking card.
+ *
+ * - Package booking with a real price → "Price · ₱X"
+ * - Custom request:
+ *   - if backend has set a final `price > 0` → "Price · ₱X"
+ *   - else if the customer submitted a budget → "Budget · ₱X"
+ *   - else → "Quote · TBD"
+ */
+function pickDisplayPrice(b: CustomerBookingListItem): {
+  label: string;
+  value: string;
+} {
+  const finalPrice = toNumberOrNull(b.price);
+  if (finalPrice !== null && finalPrice > 0) {
+    return { label: 'Price', value: formatPrice(finalPrice, b.currency) };
+  }
+  const isCustom =
+    b.selectionMode === 'CUSTOM_REQUEST' ||
+    (!b.packageName && !!b.customRequestText);
+  if (isCustom) {
+    const budget = toNumberOrNull(b.customRequestBudget);
+    if (budget !== null && budget > 0) {
+      return { label: 'Budget', value: formatPrice(budget, b.currency) };
+    }
+    return { label: 'Quote', value: 'TBD' };
+  }
+  // Fallback for an unset numeric: treat as quote.
+  return { label: 'Quote', value: 'TBD' };
 }

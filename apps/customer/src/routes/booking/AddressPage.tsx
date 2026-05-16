@@ -1,6 +1,10 @@
 import { useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowRight, MapPin } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { ArrowRight, Home, MapPin } from 'lucide-react';
+import { api } from '@/lib/api';
+import type { MeResponse } from '@/types/api';
+import { useAuthStore } from '@/stores/auth';
 import { useBookingDraft } from '@/stores/booking-draft';
 import { Button } from '@/components/ui/button';
 
@@ -18,8 +22,27 @@ export function AddressPage() {
   const { partnerId = '' } = useParams();
   const navigate = useNavigate();
   const draft = useBookingDraft();
+  const token = useAuthStore((s) => s.token);
+  const userRole = useAuthStore((s) => s.user?.role);
+  const meEnabled = !!token && userRole === 'CUSTOMER';
 
-  // Pre-fill city/state from the search context if available.
+  // Fetch /auth/me only when there's a customer token — gives us the saved
+  // defaultAddress to power the "Use my address" shortcut.
+  const meQuery = useQuery({
+    queryKey: ['auth', 'me'],
+    queryFn: () => api.get<MeResponse>('/auth/me'),
+    enabled: meEnabled,
+    staleTime: 60_000,
+  });
+
+  const savedAddress = meQuery.data?.data?.customerProfile?.defaultAddress;
+  const canUseSaved =
+    !!savedAddress &&
+    !!savedAddress.line1?.trim() &&
+    !!savedAddress.city?.trim() &&
+    !!savedAddress.state?.trim();
+
+  // Pre-fill city/state from the search context if no address yet.
   useEffect(() => {
     if (draft.address) return;
     draft.setAddress({
@@ -33,6 +56,19 @@ export function AddressPage() {
   const value = draft.address ?? EMPTY;
   const set = <K extends keyof typeof EMPTY>(key: K, v: string) =>
     draft.setAddress({ ...value, [key]: v });
+
+  const handleUseSavedAddress = () => {
+    if (!savedAddress) return;
+    draft.setAddress({
+      line1: savedAddress.line1 ?? '',
+      line2: savedAddress.line2 ?? '',
+      city: savedAddress.city ?? '',
+      state: savedAddress.state ?? '',
+      postalCode: savedAddress.postalCode ?? '',
+      country: savedAddress.country ?? 'Philippines',
+      notes: value.notes, // keep any notes the user has already typed
+    });
+  };
 
   const canContinue =
     value.line1.trim().length > 2 &&
@@ -61,6 +97,38 @@ export function AddressPage() {
       </div>
 
       <div className="rounded-2xl bg-white ring-1 ring-border p-5 md:p-6 grid gap-4">
+        {canUseSaved && (
+          <div className="rounded-xl bg-primary/[0.06] border border-primary/20 p-3 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-start gap-3 min-w-0">
+              <div className="grid place-items-center size-9 rounded-lg bg-primary/15 text-primary shrink-0">
+                <Home className="size-4" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold">
+                  Use your saved address
+                </p>
+                <p className="text-xs text-muted-foreground truncate">
+                  {savedAddress!.label
+                    ? `${savedAddress!.label} · `
+                    : ''}
+                  {[savedAddress!.line1, savedAddress!.city]
+                    .filter(Boolean)
+                    .join(', ')}
+                </p>
+              </div>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleUseSavedAddress}
+              className="shrink-0"
+            >
+              Use my address
+            </Button>
+          </div>
+        )}
+
         <div className="grid sm:grid-cols-[40px_1fr] items-start gap-3">
           <div className="hidden sm:grid place-items-center size-10 rounded-xl bg-primary/10 text-primary mt-1">
             <MapPin className="size-5" />

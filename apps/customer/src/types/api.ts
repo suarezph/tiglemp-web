@@ -126,11 +126,12 @@ export type CustomerBookingListItem = {
   status: CustomerBookingStatus;
   scheduledAt: string;
   serviceAddress: BookingServiceAddressPayload | null;
-  price: number | null;
-  discountPrice?: number | null;
+  price: number | string | null;
+  discountPrice?: number | string | null;
   currency: string | null;
   packageName?: string | null;
   customRequestText?: string | null;
+  customRequestBudget?: number | string | null;
   notes?: string | null;
   hasReview?: boolean;
   canReview?: boolean;
@@ -145,6 +146,57 @@ export type CustomerBookingListItem = {
     id: string;
     businessName: string;
   };
+};
+
+export type BookingStatusLog = {
+  id: string;
+  bookingId: string;
+  actorId: string | null;
+  status: CustomerBookingStatus;
+  note: string | null;
+  metadata: unknown | null;
+  createdAt: string;
+};
+
+export type CustomerBookingDetail = CustomerBookingListItem & {
+  customerId: string | null;
+  createdByUserId?: string | null;
+  detailsJson?: unknown | null;
+  isGuestBooking?: boolean;
+  guestName?: string | null;
+  guestEmail?: string | null;
+  guestPhone?: string | null;
+  guestClaimedAt?: string | null;
+  releaseComment?: string | null;
+  approvedAt?: string | null;
+  releasedAt?: string | null;
+  packagePrice?: number | null;
+  packageCurrency?: string | null;
+  packageEstimatedDurationMinutes?: number | null;
+  packageFeatures?: string[] | null;
+  customRequestBudget?: number | null;
+  partnerPackage?: {
+    id: string;
+    name: string;
+    description?: string | null;
+    price: number;
+    currency: string;
+    estimatedDurationMinutes: number;
+    features: string[];
+    badgeLabel: string | null;
+  } | null;
+  partner?: {
+    id: string;
+    businessName: string;
+    phone?: string | null;
+    users?: Array<{
+      email: string;
+      isPartnerRoot?: boolean;
+      isActive?: boolean;
+    }>;
+  };
+  review?: unknown | null;
+  statusLogs?: BookingStatusLog[];
 };
 
 export type BookingResponse = {
