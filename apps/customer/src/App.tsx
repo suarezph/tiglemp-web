@@ -13,6 +13,7 @@ import { ReviewPage } from '@/routes/booking/ReviewPage';
 import { ConfirmedPage } from '@/routes/booking/ConfirmedPage';
 import { CustomerDashboardPage } from '@/routes/customer/CustomerDashboardPage';
 import { CustomerBookingDetailPage } from '@/routes/customer/CustomerBookingDetailPage';
+import { CustomerReviewPage } from '@/routes/customer/CustomerReviewPage';
 
 function App() {
   return (
@@ -34,7 +35,12 @@ function App() {
       <Route path="/customer/dashboard" element={<CustomerDashboardPage />} />
       <Route
         path="/customer/bookings/:bookingId"
-        element={<CustomerBookingDetailPage />} />
+        element={<CustomerBookingDetailPage />}
+      />
+      <Route
+        path="/customer/bookings/:bookingId/review"
+        element={<CustomerReviewPage />}
+      />
     </Routes>
   );
 }

@@ -140,6 +140,42 @@ export type BookingStatusMeta = {
   customerCanCancel?: boolean;
 };
 
+/**
+ * Shape returned by POST /customer/bookings/:id/review,
+ * GET /customer/reviews, GET /partner/reviews, and
+ * GET /admin/partners/:id/reviews.
+ */
+export type PartnerReview = {
+  id: string;
+  bookingId: string;
+  customerId: string;
+  partnerId: string;
+  rating: number;
+  title: string | null;
+  comment: string | null;
+  createdAt: string;
+  updatedAt: string;
+  booking?: {
+    id: string;
+    bookingCode: string;
+    scheduledAt: string;
+    status: string;
+    serviceType?: { id: string; code: string; name: string } | null;
+    partnerPackage?: { id: string; name: string } | null;
+  } | null;
+  partner?: {
+    id: string;
+    businessName: string;
+    phone?: string | null;
+  } | null;
+  customer?: {
+    id: string;
+    fullName: string;
+    phone?: string | null;
+    user?: { email: string } | null;
+  } | null;
+};
+
 export type CustomerBookingListItem = {
   id: string;
   bookingCode: string;
