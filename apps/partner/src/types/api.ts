@@ -259,3 +259,142 @@ export type PartnerPackagePayload = {
   isActive?: boolean;
   sortOrder?: number;
 };
+
+// ---------- Bookings ------------------------------------------------------
+
+export type BookingStatus =
+  | 'PENDING_ASSIGNMENT'
+  | 'AWAITING_PARTNER_APPROVAL'
+  | 'PARTNER_APPROVED'
+  | 'RELEASED'
+  | 'IN_PROGRESS'
+  | 'COMPLETED'
+  | 'CANCELLED';
+
+export type BookingStatusGroup =
+  | 'active'
+  | 'released'
+  | 'completed'
+  | 'cancelled';
+
+/**
+ * Presentation metadata for a Booking.status, supplied by the backend so the
+ * UI doesn't hardcode enum text or permission rules. Business rules still come
+ * from server validation — these flags are for showing/hiding affordances.
+ */
+export type BookingStatusMeta = {
+  label: string;
+  description: string;
+  group: BookingStatusGroup;
+  partnerCanApprove?: boolean;
+  partnerCanRelease?: boolean;
+  partnerCanStart?: boolean;
+  partnerCanComplete?: boolean;
+};
+
+export type BookingSelectionMode = 'PACKAGE' | 'CUSTOM_REQUEST';
+
+export type BookingStatusLog = {
+  id: string;
+  bookingId: string;
+  actorId: string | null;
+  status: BookingStatus;
+  note: string | null;
+  metadata: unknown | null;
+  createdAt: string;
+};
+
+export type BookingCustomer = {
+  id: string;
+  userId: string;
+  fullName: string;
+  phone: string;
+  defaultAddress?: Address | null;
+  createdAt: string;
+  updatedAt: string;
+  user?: { email: string } | null;
+};
+
+/**
+ * Booking shape returned by `/partner/bookings` and `/partner/bookings/:id`.
+ * The list endpoint and detail endpoint return the same shape; numeric fields
+ * are sometimes serialized as strings (Decimal columns), so the form helpers
+ * tolerate both.
+ */
+export type Booking = {
+  id: string;
+  bookingCode: string;
+  customerId: string | null;
+  partnerId: string | null;
+  createdByUserId: string | null;
+  serviceTypeId: string;
+  partnerPackageId: string | null;
+  selectionMode: BookingSelectionMode | null;
+  status: BookingStatus;
+  statusMeta?: BookingStatusMeta;
+  scheduledAt: string;
+  serviceAddress: Address | null;
+  price: number | string;
+  discountPrice: number | string | null;
+  currency: string;
+  packageName: string | null;
+  packagePrice: number | string | null;
+  packageCurrency: string | null;
+  packageEstimatedDurationMinutes: number | null;
+  packageFeatures: string[] | null;
+  customRequestText: string | null;
+  customRequestBudget: number | string | null;
+  notes: string | null;
+  detailsJson: unknown | null;
+  releaseComment: string | null;
+  approvedAt: string | null;
+  releasedAt: string | null;
+  isGuestBooking?: boolean;
+  guestName?: string | null;
+  guestEmail?: string | null;
+  guestPhone?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  customer?: BookingCustomer | null;
+  serviceType?: ServiceType | null;
+  partnerPackage?: PartnerPackage | null;
+  statusLogs?: BookingStatusLog[];
+  carWashDetails?: Record<string, unknown> | null;
+  homeCleaningDetails?: Record<string, unknown> | null;
+  propertyCleaningDetails?: Record<string, unknown> | null;
+  laundryDetails?: Record<string, unknown> | null;
+  transitionServiceDetails?: Record<string, unknown> | null;
+  maintenanceCleaningDetails?: Record<string, unknown> | null;
+  commercialCleaningServiceDetails?: Record<string, unknown> | null;
+};
+
+export type PartnerBookingCustomer = BookingCustomer;
+
+export type PartnerCreateBookingPayload = {
+  customerId: string;
+  serviceTypeId: string;
+  selectionMode: BookingSelectionMode;
+  partnerPackageId?: string | null;
+  customRequestText?: string | null;
+  customRequestBudget?: number | null;
+  scheduledAt: string;
+  serviceAddress?: Address | null;
+  currency?: string;
+  notes?: string | null;
+};
+
+export type PartnerUpdateBookingPayload = {
+  serviceTypeId?: string;
+  selectionMode?: BookingSelectionMode | null;
+  partnerPackageId?: string | null;
+  customRequestText?: string | null;
+  customRequestBudget?: number | null;
+  scheduledAt?: string;
+  serviceAddress?: Address | null;
+  currency?: string;
+  notes?: string | null;
+};
+
+export type PartnerReleaseBookingPayload = {
+  releaseComment: string;
+};

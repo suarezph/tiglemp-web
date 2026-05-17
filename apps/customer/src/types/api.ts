@@ -9,6 +9,12 @@ export type ServiceType = {
   requiresAddress?: boolean;
   detailModelKey?: string | null;
   isActive?: boolean;
+  /**
+   * Number of eligible (approved + active + matching coverage if filtered)
+   * partners offering this service. Only present on /meta/service-types.
+   * `0` means the tab should be disabled.
+   */
+  partnerCount?: number;
 };
 
 export type PartnerReviewSummary = {
@@ -108,13 +114,31 @@ export type CreateGuestBookingPayload = CreateBookingBasePayload &
 export type CustomerBookingStatus =
   | 'PENDING_ASSIGNMENT'
   | 'AWAITING_PARTNER_APPROVAL'
-  | 'APPROVED'
+  | 'PARTNER_APPROVED'
+  | 'RELEASED'
   | 'IN_PROGRESS'
   | 'COMPLETED'
-  | 'REJECTED'
-  | 'CANCELLED'
-  | 'RELEASED'
-  | string;
+  | 'CANCELLED';
+
+export type BookingStatusGroup =
+  | 'active'
+  | 'released'
+  | 'completed'
+  | 'cancelled';
+
+/**
+ * Presentation metadata for a CustomerBooking.status, supplied by the backend
+ * so the UI doesn't hardcode enum text or permission rules. Business rules
+ * still come from server validation — these flags are for showing/hiding
+ * affordances.
+ */
+export type BookingStatusMeta = {
+  label: string;
+  description: string;
+  group: BookingStatusGroup;
+  customerCanReview?: boolean;
+  customerCanCancel?: boolean;
+};
 
 export type CustomerBookingListItem = {
   id: string;
@@ -124,6 +148,7 @@ export type CustomerBookingListItem = {
   partnerPackageId?: string | null;
   selectionMode?: BookingSelectionMode;
   status: CustomerBookingStatus;
+  statusMeta?: BookingStatusMeta;
   scheduledAt: string;
   serviceAddress: BookingServiceAddressPayload | null;
   price: number | string | null;
@@ -134,7 +159,6 @@ export type CustomerBookingListItem = {
   customRequestBudget?: number | string | null;
   notes?: string | null;
   hasReview?: boolean;
-  canReview?: boolean;
   createdAt: string;
   updatedAt: string;
   serviceType?: {

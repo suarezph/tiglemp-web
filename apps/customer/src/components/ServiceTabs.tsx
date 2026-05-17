@@ -6,6 +6,10 @@ export type ServiceTabItem = {
   id: string;
   label: string;
   icon?: React.ComponentType<{ className?: string }>;
+  /** When true, the tab renders muted and ignores clicks. */
+  disabled?: boolean;
+  /** Optional tooltip text — e.g. "No partners yet". */
+  disabledHint?: string;
 };
 
 type ServiceTabsProps = {
@@ -88,16 +92,24 @@ export function ServiceTabs({
         {services.map((s) => {
           const Icon = s.icon ?? Sparkles;
           const active = s.id === activeId;
+          const disabled = !!s.disabled;
           return (
             <button
               key={s.id}
               type="button"
               role="tab"
               aria-selected={active}
-              onClick={() => onChange(s.id)}
+              aria-disabled={disabled || undefined}
+              disabled={disabled}
+              title={disabled ? s.disabledHint : undefined}
+              onClick={() => {
+                if (!disabled) onChange(s.id);
+              }}
               className={cn(
                 'group flex items-center gap-2.5 px-5 h-full whitespace-nowrap border-b-2 -mb-px transition-colors snap-start',
-                active
+                disabled
+                  ? 'border-transparent text-muted-foreground/50 cursor-not-allowed'
+                  : active
                   ? 'border-primary text-primary'
                   : 'border-transparent text-muted-foreground hover:text-foreground'
               )}
@@ -105,7 +117,9 @@ export function ServiceTabs({
               <Icon
                 className={cn(
                   'size-5 transition-colors',
-                  active
+                  disabled
+                    ? 'text-muted-foreground/40'
+                    : active
                     ? 'text-primary'
                     : 'text-muted-foreground group-hover:text-foreground'
                 )}

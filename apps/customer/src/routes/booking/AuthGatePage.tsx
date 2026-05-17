@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowRight, LogIn, UserPlus, UserRound } from 'lucide-react';
+import {
+  ArrowRight,
+  CheckCircle2,
+  LogIn,
+  UserPlus,
+  UserRound,
+} from 'lucide-react';
 import { shouldCollectAddress, useBookingDraft } from '@/stores/booking-draft';
 import { useAuthStore } from '@/stores/auth';
 import { Button } from '@/components/ui/button';
@@ -10,6 +16,8 @@ export function AuthGatePage() {
   const navigate = useNavigate();
   const draft = useBookingDraft();
   const authed = useAuthStore((s) => !!s.token && s.user?.role === 'CUSTOMER');
+  const userEmail = useAuthStore((s) => s.user?.email ?? null);
+  const logout = useAuthStore((s) => s.logout);
   const [mode, setMode] = useState<'choose' | 'guest'>('choose');
 
   const nextStep = shouldCollectAddress(draft.search.serviceTypeFulfillmentMode)
@@ -30,6 +38,12 @@ export function AuthGatePage() {
   const redirectTarget = `/book/${partnerId}/${nextStep}`;
   const redirectQuery = `?redirect=${encodeURIComponent(redirectTarget)}`;
 
+  const handleSwitchAccount = () => {
+    logout();
+    draft.setAuthChoice(null);
+    setMode('choose');
+  };
+
   const handleGuestSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!draft.guestContact) return;
@@ -43,6 +57,53 @@ export function AuthGatePage() {
     draft.setAuthChoice('guest');
     goNext();
   };
+
+  if (authed) {
+    const initial = (userEmail ?? '?')[0]?.toUpperCase() ?? '?';
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-xl md:text-2xl font-bold">Continue your booking</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            You're signed in. We'll attach this booking to your account.
+          </p>
+        </div>
+
+        <div className="rounded-2xl bg-white ring-1 ring-border p-5 md:p-6">
+          <div className="flex items-start gap-4">
+            <div className="grid place-items-center size-12 rounded-xl bg-primary/10 text-primary shrink-0 font-bold text-lg">
+              {initial}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5">
+                <CheckCircle2 className="size-4 text-primary" />
+                <span className="text-xs font-bold uppercase tracking-wider text-primary">
+                  Signed in
+                </span>
+              </div>
+              <p className="mt-1 font-semibold truncate">
+                {userEmail ?? 'Your account'}
+              </p>
+              <button
+                type="button"
+                onClick={handleSwitchAccount}
+                className="mt-1 text-xs font-semibold text-muted-foreground hover:text-foreground underline-offset-2 hover:underline"
+              >
+                Use a different account
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-end">
+          <Button type="button" onClick={goNext} className="h-11 px-6">
+            Continue
+            <ArrowRight className="size-4" />
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   if (mode === 'choose') {
     return (

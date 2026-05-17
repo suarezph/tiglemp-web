@@ -234,7 +234,7 @@ export type Customer = {
   user: EmbeddedUser;
 };
 
-export type BookingServiceType = 'MOBILE_CARWASH' | 'FUTURE_SERVICE';
+export type BookingSelectionMode = 'PACKAGE' | 'CUSTOM_REQUEST';
 
 export type BookingStatus =
   | 'PENDING_ASSIGNMENT'
@@ -245,46 +245,114 @@ export type BookingStatus =
   | 'COMPLETED'
   | 'CANCELLED';
 
-export type MobileCarWashDetails = {
-  vehicleType: string;
-  vehicleBrand?: string | null;
-  vehicleModel?: string | null;
-  plateNumber?: string | null;
-  washPackage: string;
-  addOns?: string[];
-  interiorCleaning?: boolean;
-  engineDetailing?: boolean;
-  waterSourceAvailable?: boolean;
-  powerOutletAvailable?: boolean;
-  parkingNotes?: string | null;
-  dirtLevel?: string | null;
-  specialInstructions?: string | null;
+export type BookingStatusGroup =
+  | 'active'
+  | 'released'
+  | 'completed'
+  | 'cancelled';
+
+/**
+ * Presentation metadata for a Booking.status, supplied by the backend so the
+ * admin UI doesn't hardcode enum text. Business rules still come from server
+ * validation.
+ */
+export type BookingStatusMeta = {
+  label: string;
+  description: string;
+  group: BookingStatusGroup;
 };
 
 export type BookingStatusLog = {
   id: string;
   bookingId: string;
+  actorId?: string | null;
   status: BookingStatus;
-  comment: string | null;
+  note?: string | null;
+  comment?: string | null;
+  metadata?: unknown | null;
   createdAt: string;
+};
+
+/**
+ * Shape of a partner package as embedded on a Booking or returned by
+ * `GET /admin/partners/:id/packages`.
+ */
+export type BookingPartnerPackage = {
+  id: string;
+  partnerId?: string;
+  serviceTypeId: string;
+  name: string;
+  description?: string | null;
+  price: number | string;
+  currency: string;
+  estimatedDurationMinutes: number;
+  features: string[];
+  badgeLabel?: string | null;
+  isActive?: boolean;
+  sortOrder?: number;
+};
+
+export type BookingCustomerSummary = {
+  id: string;
+  userId?: string;
+  fullName: string;
+  phone?: string | null;
+  defaultAddress?: Address | null;
+  user?: { id?: string; email: string } | null;
+};
+
+export type BookingPartnerSummary = {
+  id: string;
+  businessName: string;
+  phone?: string | null;
+  users?: Array<{ email: string; isPartnerRoot?: boolean; isActive?: boolean }>;
 };
 
 export type Booking = {
   id: string;
-  serviceType: BookingServiceType;
+  bookingCode: string;
+  customerId: string | null;
+  partnerId: string | null;
+  serviceTypeId: string;
+  partnerPackageId: string | null;
+  selectionMode: BookingSelectionMode | null;
   status: BookingStatus;
+  statusMeta?: BookingStatusMeta;
   scheduledAt: string;
-  serviceAddress: Address;
-  price: string;
-  discountPrice: string | null;
+  serviceAddress: Address | null;
+  price: number | string;
+  discountPrice: number | string | null;
   currency: string;
+  packageName: string | null;
+  packagePrice: number | string | null;
+  packageCurrency: string | null;
+  packageEstimatedDurationMinutes: number | null;
+  packageFeatures: string[] | null;
+  customRequestText: string | null;
+  customRequestBudget: number | string | null;
   notes: string | null;
   releaseComment: string | null;
+  approvedAt?: string | null;
   releasedAt: string | null;
-  customer: Customer;
-  partner: Partner | null;
-  mobileCarWashDetails: MobileCarWashDetails | null;
-  statusLogs: BookingStatusLog[];
+  isGuestBooking?: boolean;
+  guestName?: string | null;
+  guestEmail?: string | null;
+  guestPhone?: string | null;
+  hasReview?: boolean;
+  canReview?: boolean;
   createdAt: string;
+  updatedAt: string;
+  customer?: BookingCustomerSummary | null;
+  partner?: BookingPartnerSummary | null;
+  serviceType?: ServiceType | null;
+  partnerPackage?: BookingPartnerPackage | null;
+  statusLogs?: BookingStatusLog[];
+  carWashDetails?: Record<string, unknown> | null;
+  homeCleaningDetails?: Record<string, unknown> | null;
+  propertyCleaningDetails?: Record<string, unknown> | null;
+  laundryDetails?: Record<string, unknown> | null;
+  transitionServiceDetails?: Record<string, unknown> | null;
+  maintenanceCleaningDetails?: Record<string, unknown> | null;
+  commercialCleaningServiceDetails?: Record<string, unknown> | null;
 };
 

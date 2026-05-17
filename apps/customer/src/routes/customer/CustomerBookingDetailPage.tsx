@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
   Check,
@@ -13,11 +13,13 @@ import {
   Sparkles,
   Star,
   XCircle,
+  XOctagon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { api, ApiError } from '@/lib/api';
 import type {
   BookingStatusLog,
+  BookingStatusMeta,
   CustomerBookingDetail,
   CustomerBookingStatus,
 } from '@/types/api';
@@ -25,6 +27,14 @@ import { SiteNavbar } from '@/components/SiteNavbar';
 import { SiteFooter } from '@/components/SiteFooter';
 import { PageMeta } from '@/components/PageMeta';
 import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 export function CustomerBookingDetailPage() {
   const { bookingId = '' } = useParams();
@@ -124,7 +134,7 @@ function BookingBody({ booking }: { booking: CustomerBookingDetail }) {
               {partnerName}
             </h1>
             <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
-              <StatusBadge status={booking.status} />
+              <StatusBadge status={booking.status} meta={booking.statusMeta} />
               {booking.isGuestBooking && (
                 <span className="inline-flex items-center rounded-full bg-foreground/10 text-foreground px-2.5 py-0.5 text-[11px] font-semibold">
                   Guest booking
@@ -137,6 +147,11 @@ function BookingBody({ booking }: { booking: CustomerBookingDetail }) {
                 </span>
               )}
             </div>
+            {booking.statusMeta?.description && (
+              <p className="mt-1.5 text-xs text-muted-foreground">
+                {booking.statusMeta.description}
+              </p>
+            )}
           </div>
         </div>
 
@@ -314,7 +329,7 @@ function BookingBody({ booking }: { booking: CustomerBookingDetail }) {
       )}
 
       {/* Review CTA */}
-      {booking.canReview && !booking.hasReview && (
+      {booking.statusMeta?.customerCanReview && !booking.hasReview && (
         <section className="rounded-2xl bg-primary/[0.05] ring-1 ring-primary/30 p-5 md:p-6 flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
             <p className="font-semibold flex items-center gap-2">
@@ -334,6 +349,10 @@ function BookingBody({ booking }: { booking: CustomerBookingDetail }) {
         </section>
       )}
 
+      {booking.statusMeta?.customerCanCancel && (
+        <CancelBookingSection booking={booking} />
+      )}
+
       <div>
         <Button asChild variant="outline">
           <Link to="/customer/dashboard">
@@ -342,6 +361,112 @@ function BookingBody({ booking }: { booking: CustomerBookingDetail }) {
           </Link>
         </Button>
       </div>
+    </>
+  );
+}
+
+function CancelBookingSection({
+  booking,
+}: {
+  booking: CustomerBookingDetail;
+}) {
+  const [open, setOpen] = useState(false);
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      api.patch<CustomerBookingDetail>(
+        `/customer/bookings/${encodeURIComponent(booking.id)}/cancel`
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ['customer', 'booking', booking.id],
+      });
+      queryClient.invalidateQueries({ queryKey: ['customer', 'bookings'] });
+      setOpen(false);
+    },
+  });
+
+  const errorMessage = (() => {
+    const err = mutation.error;
+    if (!(err instanceof ApiError)) return null;
+    const statusErrors = err.fieldErrors?.status;
+    if (Array.isArray(statusErrors) && statusErrors.length > 0) {
+      return statusErrors[0];
+    }
+    return err.message;
+  })();
+
+  return (
+    <>
+      <section className="rounded-2xl bg-white ring-1 ring-border p-5 md:p-6 flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="font-semibold">Need to cancel?</p>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            You can cancel free of charge until a partner approves this booking.
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          onClick={() => setOpen(true)}
+          className="shrink-0 text-destructive hover:text-destructive"
+        >
+          <XOctagon className="size-4" />
+          Cancel booking
+        </Button>
+      </section>
+
+      <Dialog
+        open={open}
+        onOpenChange={(o) => {
+          if (!o) {
+            mutation.reset();
+            setOpen(false);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <XOctagon className="size-5 text-destructive" />
+              Cancel booking
+            </DialogTitle>
+            <DialogDescription>
+              This will cancel{' '}
+              <span className="font-mono text-foreground">
+                {booking.bookingCode}
+              </span>
+              . You'll need to make a new booking if you change your mind.
+            </DialogDescription>
+          </DialogHeader>
+          {errorMessage && (
+            <div
+              role="alert"
+              className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
+            >
+              {errorMessage}
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setOpen(false)}
+              disabled={mutation.isPending}
+            >
+              Keep booking
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => mutation.mutate()}
+              disabled={mutation.isPending}
+            >
+              {mutation.isPending ? 'Cancelling…' : 'Cancel booking'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
@@ -429,52 +554,15 @@ function TimelineRow({ log }: { log: BookingStatusLog }) {
   );
 }
 
-function StatusBadge({ status }: { status: CustomerBookingStatus }) {
-  const norm = String(status).toUpperCase();
-  const styles = (() => {
-    switch (norm) {
-      case 'COMPLETED':
-        return 'bg-primary/10 text-primary';
-      case 'CANCELLED':
-      case 'REJECTED':
-        return 'bg-destructive/10 text-destructive';
-      case 'IN_PROGRESS':
-        return 'bg-blue-100 text-blue-800';
-      case 'APPROVED':
-        return 'bg-emerald-100 text-emerald-800';
-      case 'RELEASED':
-        return 'bg-foreground/10 text-foreground';
-      case 'PENDING_ASSIGNMENT':
-      case 'AWAITING_PARTNER_APPROVAL':
-      default:
-        return 'bg-amber-100 text-amber-800';
-    }
-  })();
-  const label = (() => {
-    switch (norm) {
-      case 'PENDING_ASSIGNMENT':
-        return 'Pending assignment';
-      case 'AWAITING_PARTNER_APPROVAL':
-        return 'Awaiting partner';
-      case 'APPROVED':
-        return 'Approved';
-      case 'IN_PROGRESS':
-        return 'In progress';
-      case 'COMPLETED':
-        return 'Completed';
-      case 'REJECTED':
-        return 'Rejected';
-      case 'CANCELLED':
-        return 'Cancelled';
-      case 'RELEASED':
-        return 'Released';
-      default:
-        return norm
-          .toLowerCase()
-          .replace(/_/g, ' ')
-          .replace(/^./, (c) => c.toUpperCase());
-    }
-  })();
+function StatusBadge({
+  status,
+  meta,
+}: {
+  status: CustomerBookingStatus;
+  meta?: BookingStatusMeta;
+}) {
+  const label = meta?.label ?? CUSTOMER_STATUS_LABEL[status];
+  const styles = STATUS_BADGE_CLASS[status];
   return (
     <span
       className={cn(
@@ -486,6 +574,26 @@ function StatusBadge({ status }: { status: CustomerBookingStatus }) {
     </span>
   );
 }
+
+const CUSTOMER_STATUS_LABEL: Record<CustomerBookingStatus, string> = {
+  PENDING_ASSIGNMENT: 'Searching for partner',
+  AWAITING_PARTNER_APPROVAL: 'Awaiting partner approval',
+  PARTNER_APPROVED: 'Confirmed',
+  RELEASED: 'Released',
+  IN_PROGRESS: 'In progress',
+  COMPLETED: 'Completed',
+  CANCELLED: 'Cancelled',
+};
+
+const STATUS_BADGE_CLASS: Record<CustomerBookingStatus, string> = {
+  PENDING_ASSIGNMENT: 'bg-amber-100 text-amber-800',
+  AWAITING_PARTNER_APPROVAL: 'bg-amber-100 text-amber-800',
+  PARTNER_APPROVED: 'bg-emerald-100 text-emerald-800',
+  RELEASED: 'bg-foreground/10 text-foreground',
+  IN_PROGRESS: 'bg-blue-100 text-blue-800',
+  COMPLETED: 'bg-primary/10 text-primary',
+  CANCELLED: 'bg-destructive/10 text-destructive',
+};
 
 // API may return numeric fields as strings ("0", "1700.00"). Normalise.
 function toNumberOrNull(v: unknown): number | null {

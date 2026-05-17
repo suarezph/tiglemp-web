@@ -2,10 +2,22 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useParams } from 'react-router-dom';
 import { Check, ChevronDown, ClipboardList } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { shouldCollectAddress, useBookingDraft } from '@/stores/booking-draft';
+import {
+  shouldCollectAddress,
+  useBookingDraft,
+  type BookingSearchContext,
+} from '@/stores/booking-draft';
 import { useOnClickOutside } from '@/hooks/use-on-click-outside';
 import { SiteNavbar } from '@/components/SiteNavbar';
 import { SiteFooter } from '@/components/SiteFooter';
+
+function buildBackToResultsHref(search: BookingSearchContext): string {
+  const { serviceTypeId, regionId, cityId, scheduledAt } = search;
+  if (!serviceTypeId || !regionId || !cityId) return '/search';
+  const qs = new URLSearchParams({ serviceTypeId, regionId, cityId });
+  if (scheduledAt) qs.set('at', scheduledAt);
+  return `/search?${qs.toString()}`;
+}
 
 const STEP_ORDER = ['packages', 'auth', 'address', 'review'] as const;
 type StepKey = (typeof STEP_ORDER)[number];
@@ -43,6 +55,11 @@ export function BookingLayout() {
     !!draft.address,
   ].filter(Boolean).length;
 
+  // SearchResultsPage reads serviceTypeId/regionId/cityId/at from the URL and
+  // shows "Missing search parameters" when any are missing. Reconstruct them
+  // from the persisted draft so the link doesn't drop context.
+  const backToResultsHref = buildBackToResultsHref(draft.search);
+
   return (
     <>
       <SiteNavbar />
@@ -51,7 +68,7 @@ export function BookingLayout() {
         <div className="mx-auto max-w-[1200px] px-6 py-6">
           <div className="flex items-center justify-between gap-4 mb-4">
             <Link
-              to="/search"
+              to={backToResultsHref}
               className="text-sm text-muted-foreground hover:text-foreground"
             >
               ← Back to results

@@ -23,11 +23,14 @@ export function LandingPage() {
 
   const [activeServiceId, setActiveServiceId] = useState<string | null>(null);
 
-  // Default the hero tab to the first service once the list arrives.
+  // Default the hero tab to the first service that has at least one partner.
+  // The backend already sorts by partnerCount DESC, so this is just a safety
+  // net for the (very unlikely) case where every service has zero partners.
   useEffect(() => {
-    if (activeServiceId === null && apiServices.length > 0) {
-      setActiveServiceId(apiServices[0].id);
-    }
+    if (activeServiceId !== null || apiServices.length === 0) return;
+    const firstAvailable =
+      apiServices.find((s) => (s.partnerCount ?? 0) > 0) ?? apiServices[0];
+    setActiveServiceId(firstAvailable.id);
   }, [activeServiceId, apiServices]);
 
   // Clicking "Book now" on a service card selects that service in the hero

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ArrowRight, ChevronDown, ChevronUp } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { getServiceIcon } from '@/lib/service-icons';
 import type { ServiceType } from '@/types/api';
 
@@ -85,33 +86,55 @@ export function ServicesGrid({
               ))
             : visibleServices.map((service) => {
                 const Icon = getServiceIcon(service.code);
+                const unavailable = service.partnerCount === 0;
                 return (
-                <button
-                  key={service.id}
-                  type="button"
-                  onClick={() => onBookService(service.id)}
-                  className="group text-left rounded-2xl bg-white p-5 ring-1 ring-border hover:ring-primary/50 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
-                >
-                  <div className="flex items-start gap-4">
-                    <div className="size-12 shrink-0 rounded-xl bg-primary/12 grid place-items-center text-primary transition-colors group-hover:bg-primary group-hover:text-white">
-                      <Icon className="size-6" strokeWidth={2} />
+                  <button
+                    key={service.id}
+                    type="button"
+                    onClick={() => onBookService(service.id)}
+                    disabled={unavailable}
+                    aria-disabled={unavailable || undefined}
+                    title={unavailable ? 'No partners yet' : undefined}
+                    className={cn(
+                      'group text-left rounded-2xl bg-white p-5 ring-1 ring-border transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60',
+                      unavailable
+                        ? 'opacity-60 cursor-not-allowed'
+                        : 'hover:ring-primary/50 hover:shadow-lg hover:-translate-y-0.5'
+                    )}
+                  >
+                    <div className="flex items-start gap-4">
+                      <div
+                        className={cn(
+                          'size-12 shrink-0 rounded-xl grid place-items-center transition-colors',
+                          unavailable
+                            ? 'bg-foreground/5 text-muted-foreground'
+                            : 'bg-primary/12 text-primary group-hover:bg-primary group-hover:text-white'
+                        )}
+                      >
+                        <Icon className="size-6" strokeWidth={2} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-base md:text-lg font-bold leading-snug text-foreground">
+                          {service.name}
+                        </h3>
+                        {service.description && (
+                          <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
+                            {service.description}
+                          </p>
+                        )}
+                        {unavailable ? (
+                          <span className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-muted-foreground">
+                            No partners yet
+                          </span>
+                        ) : (
+                          <span className="mt-3 inline-flex items-center gap-1.5 text-sm font-bold text-primary">
+                            Book now
+                            <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="text-base md:text-lg font-bold leading-snug text-foreground">
-                        {service.name}
-                      </h3>
-                      {service.description && (
-                        <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
-                          {service.description}
-                        </p>
-                      )}
-                      <span className="mt-3 inline-flex items-center gap-1.5 text-sm font-bold text-primary">
-                        Book now
-                        <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
-                      </span>
-                    </div>
-                  </div>
-                </button>
+                  </button>
                 );
               })}
         </div>

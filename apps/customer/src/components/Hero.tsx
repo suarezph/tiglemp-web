@@ -47,11 +47,16 @@ export function Hero({
         <div id="book" className="mt-10 md:mt-14 max-w-6xl mx-auto scroll-mt-20">
           <div className="rounded-2xl bg-white shadow-2xl ring-1 ring-black/5">
             <ServiceTabs
-              services={services.map((s) => ({
-                id: s.id,
-                label: s.name,
-                icon: getServiceIcon(s.code),
-              }))}
+              services={services.map((s) => {
+                const disabled = s.partnerCount === 0;
+                return {
+                  id: s.id,
+                  label: s.name,
+                  icon: getServiceIcon(s.code),
+                  disabled,
+                  disabledHint: disabled ? 'No partners yet' : undefined,
+                };
+              })}
               activeId={activeServiceId}
               onChange={onActiveServiceIdChange}
               loading={servicesLoading}

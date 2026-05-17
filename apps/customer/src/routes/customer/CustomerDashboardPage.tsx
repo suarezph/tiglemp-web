@@ -18,6 +18,7 @@ import {
 import { cn } from '@/lib/utils';
 import { api, ApiError } from '@/lib/api';
 import type {
+  BookingStatusMeta,
   CustomerBookingListItem,
   CustomerBookingStatus,
 } from '@/types/api';
@@ -30,15 +31,19 @@ import { ProfileModal } from '@/routes/customer/ProfileModal';
 
 type TabKey = 'upcoming' | 'past' | 'all';
 
-const UPCOMING_STATUSES = new Set<string>([
-  'PENDING_ASSIGNMENT',
-  'AWAITING_PARTNER_APPROVAL',
-  'APPROVED',
-  'IN_PROGRESS',
-]);
-
-function isUpcomingStatus(status: CustomerBookingStatus): boolean {
-  return UPCOMING_STATUSES.has(String(status));
+/**
+ * "Upcoming" for the customer dashboard means anything still in flight. Prefer
+ * the backend's statusMeta.group when available; fall back to the status enum
+ * so the UI still works on older responses.
+ */
+function isUpcoming(b: CustomerBookingListItem): boolean {
+  if (b.statusMeta) return b.statusMeta.group === 'active';
+  return (
+    b.status === 'PENDING_ASSIGNMENT' ||
+    b.status === 'AWAITING_PARTNER_APPROVAL' ||
+    b.status === 'PARTNER_APPROVED' ||
+    b.status === 'IN_PROGRESS'
+  );
 }
 
 const BOOKINGS_KEY = ['customer', 'bookings'] as const;
@@ -67,7 +72,7 @@ export function CustomerDashboardPage() {
     const u: CustomerBookingListItem[] = [];
     const p: CustomerBookingListItem[] = [];
     for (const b of bookings) {
-      (isUpcomingStatus(b.status) ? u : p).push(b);
+      (isUpcoming(b) ? u : p).push(b);
     }
     u.sort(
       (a, b) =>
@@ -215,10 +220,7 @@ export function CustomerDashboardPage() {
               <ul className="grid gap-3">
                 {visible.map((b) => (
                   <li key={b.id}>
-                    <BookingCard
-                      booking={b}
-                      muted={!isUpcomingStatus(b.status)}
-                    />
+                    <BookingCard booking={b} muted={!isUpcoming(b)} />
                   </li>
                 ))}
               </ul>
@@ -411,7 +413,7 @@ function BookingCard({
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <h3 className="font-bold text-base">{serviceName}</h3>
-            <StatusBadge status={booking.status} />
+            <StatusBadge status={booking.status} meta={booking.statusMeta} />
             {booking.hasReview && (
               <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary px-2 py-0.5 text-[11px] font-semibold">
                 <Star className="size-3" />
@@ -459,7 +461,7 @@ function BookingCard({
           <Button asChild variant="outline" size="sm">
             <Link to={`/customer/bookings/${booking.id}`}>View</Link>
           </Button>
-          {booking.canReview && !booking.hasReview && (
+          {booking.statusMeta?.customerCanReview && !booking.hasReview && (
             <Button asChild size="sm" className="h-8 px-3 text-xs">
               <Link to={`/customer/bookings/${booking.id}/review`}>
                 <Star className="size-3" />
@@ -473,54 +475,15 @@ function BookingCard({
   );
 }
 
-function StatusBadge({ status }: { status: CustomerBookingStatus }) {
-  const norm = String(status).toUpperCase();
-  const styles = (() => {
-    switch (norm) {
-      case 'COMPLETED':
-        return 'bg-primary/10 text-primary';
-      case 'CANCELLED':
-      case 'REJECTED':
-        return 'bg-destructive/10 text-destructive';
-      case 'IN_PROGRESS':
-        return 'bg-blue-100 text-blue-800';
-      case 'APPROVED':
-        return 'bg-emerald-100 text-emerald-800';
-      case 'RELEASED':
-        return 'bg-foreground/10 text-foreground';
-      case 'PENDING_ASSIGNMENT':
-      case 'AWAITING_PARTNER_APPROVAL':
-      default:
-        return 'bg-amber-100 text-amber-800';
-    }
-  })();
-
-  const label = (() => {
-    switch (norm) {
-      case 'PENDING_ASSIGNMENT':
-        return 'Pending assignment';
-      case 'AWAITING_PARTNER_APPROVAL':
-        return 'Awaiting partner';
-      case 'APPROVED':
-        return 'Approved';
-      case 'IN_PROGRESS':
-        return 'In progress';
-      case 'COMPLETED':
-        return 'Completed';
-      case 'REJECTED':
-        return 'Rejected';
-      case 'CANCELLED':
-        return 'Cancelled';
-      case 'RELEASED':
-        return 'Released';
-      default:
-        return norm
-          .toLowerCase()
-          .replace(/_/g, ' ')
-          .replace(/^./, (c) => c.toUpperCase());
-    }
-  })();
-
+function StatusBadge({
+  status,
+  meta,
+}: {
+  status: CustomerBookingStatus;
+  meta?: BookingStatusMeta;
+}) {
+  const label = meta?.label ?? CUSTOMER_STATUS_LABEL[status];
+  const styles = STATUS_BADGE_CLASS[status];
   return (
     <span
       className={cn(
@@ -532,6 +495,26 @@ function StatusBadge({ status }: { status: CustomerBookingStatus }) {
     </span>
   );
 }
+
+const CUSTOMER_STATUS_LABEL: Record<CustomerBookingStatus, string> = {
+  PENDING_ASSIGNMENT: 'Searching for partner',
+  AWAITING_PARTNER_APPROVAL: 'Awaiting partner approval',
+  PARTNER_APPROVED: 'Confirmed',
+  RELEASED: 'Released',
+  IN_PROGRESS: 'In progress',
+  COMPLETED: 'Completed',
+  CANCELLED: 'Cancelled',
+};
+
+const STATUS_BADGE_CLASS: Record<CustomerBookingStatus, string> = {
+  PENDING_ASSIGNMENT: 'bg-amber-100 text-amber-800',
+  AWAITING_PARTNER_APPROVAL: 'bg-amber-100 text-amber-800',
+  PARTNER_APPROVED: 'bg-emerald-100 text-emerald-800',
+  RELEASED: 'bg-foreground/10 text-foreground',
+  IN_PROGRESS: 'bg-blue-100 text-blue-800',
+  COMPLETED: 'bg-primary/10 text-primary',
+  CANCELLED: 'bg-destructive/10 text-destructive',
+};
 
 function EmptyState({
   title,
