@@ -356,3 +356,33 @@ export type Booking = {
   commercialCleaningServiceDetails?: Record<string, unknown> | null;
 };
 
+/**
+ * Customer-submitted review for a partner. Returned by
+ * GET /admin/partners/:id/reviews. Rating is 1-5.
+ */
+export type PartnerReview = {
+  id: string;
+  bookingId: string;
+  customerId: string;
+  partnerId: string;
+  rating: number;
+  title: string | null;
+  comment: string | null;
+  createdAt: string;
+  updatedAt: string;
+  booking?: {
+    id: string;
+    bookingCode: string;
+    scheduledAt: string;
+    status: BookingStatus;
+    serviceType?: ServiceType | null;
+    partnerPackage?: { id: string; name: string } | null;
+  } | null;
+  customer?: {
+    id: string;
+    fullName: string;
+    phone?: string | null;
+    user?: { email: string } | null;
+  } | null;
+};
+

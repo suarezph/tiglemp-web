@@ -24,11 +24,13 @@ import type {
   ApprovalAction,
   ApprovalLog,
   ApprovalStatus,
+  PartnerReview,
   ServiceType,
   Partner,
   PartnerShopLocationInput,
   PartnerUser,
 } from '@/types/api';
+import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -113,6 +115,8 @@ export function Partners() {
   const [editTarget, setEditTarget] = useState<Partner | null>(null);
   const [detailsTarget, setDetailsTarget] = useState<Partner | null>(null);
   const [reviewTarget, setReviewTarget] = useState<Partner | null>(null);
+  const [customerReviewsTarget, setCustomerReviewsTarget] =
+    useState<Partner | null>(null);
   const [banTarget, setBanTarget] = useState<Partner | null>(null);
 
   const partnersQuery = useQuery({
@@ -221,6 +225,11 @@ export function Partners() {
                         <DropdownMenuItem onClick={() => setEditTarget(partner)}>
                           Edit
                         </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => setCustomerReviewsTarget(partner)}
+                        >
+                          Customer reviews
+                        </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         {partner.approvalStatus !== 'APPROVED' && (
                           <DropdownMenuItem
@@ -268,6 +277,10 @@ export function Partners() {
       <ReviewPartnerDialog
         partner={reviewTarget}
         onClose={() => setReviewTarget(null)}
+      />
+      <PartnerCustomerReviewsDialog
+        partner={customerReviewsTarget}
+        onClose={() => setCustomerReviewsTarget(null)}
       />
       <BanPartnerDialog
         partner={banTarget}
@@ -1801,4 +1814,166 @@ function BanPartnerDialog({ partner, onClose }: BanPartnerDialogProps) {
       </DialogContent>
     </Dialog>
   );
+}
+
+// ----- Customer reviews dialog --------------------------------------------
+
+type PartnerCustomerReviewsDialogProps = {
+  partner: Partner | null;
+  onClose: () => void;
+};
+
+function PartnerCustomerReviewsDialog({
+  partner,
+  onClose,
+}: PartnerCustomerReviewsDialogProps) {
+  const open = partner !== null;
+  const reviewsQuery = useQuery({
+    queryKey: ['admin', 'partners', partner?.id, 'reviews'],
+    queryFn: () =>
+      api.get<PartnerReview[]>(`/admin/partners/${partner!.id}/reviews`),
+    enabled: open,
+    retry: false,
+  });
+
+  const reviews = reviewsQuery.data?.data ?? [];
+  const summary = summarizeReviews(reviews);
+
+  return (
+    <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Customer reviews</DialogTitle>
+          <DialogDescription>
+            {partner?.businessName ?? 'Partner'} — what customers said after
+            completed bookings.
+          </DialogDescription>
+        </DialogHeader>
+
+        {reviewsQuery.isError && (
+          <p className="text-sm text-destructive" role="alert">
+            {reviewsQuery.error instanceof ApiError
+              ? reviewsQuery.error.message
+              : 'Could not load reviews.'}
+          </p>
+        )}
+
+        {!reviewsQuery.isError && (
+          <>
+            <div className="rounded-md border bg-muted/30 p-3 flex flex-wrap items-baseline gap-4">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                  Overall
+                </p>
+                <p className="text-2xl font-bold">
+                  {reviewsQuery.isPending || summary.total === 0
+                    ? '—'
+                    : summary.average.toFixed(1)}
+                </p>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {summary.total} {summary.total === 1 ? 'review' : 'reviews'}
+              </p>
+            </div>
+
+            {reviewsQuery.isPending && (
+              <p className="text-sm text-muted-foreground py-6 text-center">
+                Loading…
+              </p>
+            )}
+
+            {!reviewsQuery.isPending && reviews.length === 0 && (
+              <p className="text-sm text-muted-foreground py-6 text-center">
+                No reviews for this partner yet.
+              </p>
+            )}
+
+            <ul className="space-y-3">
+              {reviews.map((r) => (
+                <li
+                  key={r.id}
+                  className="rounded-md border bg-background p-3"
+                >
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
+                    <span className="font-semibold">
+                      {r.customer?.fullName ?? 'Customer'}
+                    </span>
+                    <ReviewStars rating={r.rating} />
+                    <span className="text-xs text-muted-foreground">
+                      {formatReviewDate(r.createdAt)}
+                    </span>
+                  </div>
+                  {r.booking?.bookingCode && (
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      <span className="font-mono">{r.booking.bookingCode}</span>
+                      {r.booking.serviceType?.name && (
+                        <>
+                          {' · '}
+                          {r.booking.serviceType.name}
+                        </>
+                      )}
+                    </p>
+                  )}
+                  {r.title && (
+                    <p className="mt-2 text-sm font-semibold">{r.title}</p>
+                  )}
+                  {r.comment && (
+                    <p className="mt-1 text-sm whitespace-pre-wrap">
+                      {r.comment}
+                    </p>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Close
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ReviewStars({ rating }: { rating: number }) {
+  return (
+    <span
+      className="inline-flex items-center gap-0.5"
+      aria-label={`${rating} out of 5`}
+    >
+      {[1, 2, 3, 4, 5].map((n) => (
+        <Star
+          key={n}
+          className={cn(
+            'size-3.5',
+            n <= rating
+              ? 'text-amber-500 fill-amber-500'
+              : 'text-muted-foreground/30'
+          )}
+        />
+      ))}
+    </span>
+  );
+}
+
+function summarizeReviews(reviews: PartnerReview[]): {
+  average: number;
+  total: number;
+} {
+  if (reviews.length === 0) return { average: 0, total: 0 };
+  const sum = reviews.reduce((acc, r) => acc + r.rating, 0);
+  return { average: sum / reviews.length, total: reviews.length };
+}
+
+function formatReviewDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+  });
 }

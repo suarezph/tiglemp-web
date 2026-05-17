@@ -5,6 +5,7 @@ import {
   LayoutDashboard,
   LogOut,
   Package,
+  Star,
   Users,
 } from 'lucide-react';
 
@@ -56,6 +57,7 @@ const ALL_NAV_ITEMS: NavItem[] = [
   { to: '/team', label: 'Team', icon: Users, rootOnly: true },
   { to: '/bookings', label: 'Bookings', icon: CalendarCheck },
   { to: '/packages', label: 'Packages', icon: Package },
+  { to: '/reviews', label: 'Reviews', icon: Star },
 ];
 
 const titleFor = (pathname: string) =>

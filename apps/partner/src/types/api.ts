@@ -398,3 +398,33 @@ export type PartnerUpdateBookingPayload = {
 export type PartnerReleaseBookingPayload = {
   releaseComment: string;
 };
+
+/**
+ * Shape returned by GET /partner/reviews (and the equivalent admin endpoint).
+ * Numeric `rating` is 1-5.
+ */
+export type PartnerReview = {
+  id: string;
+  bookingId: string;
+  customerId: string;
+  partnerId: string;
+  rating: number;
+  title: string | null;
+  comment: string | null;
+  createdAt: string;
+  updatedAt: string;
+  booking?: {
+    id: string;
+    bookingCode: string;
+    scheduledAt: string;
+    status: BookingStatus;
+    serviceType?: ServiceType | null;
+    partnerPackage?: { id: string; name: string } | null;
+  } | null;
+  customer?: {
+    id: string;
+    fullName: string;
+    phone?: string | null;
+    user?: { email: string } | null;
+  } | null;
+};
